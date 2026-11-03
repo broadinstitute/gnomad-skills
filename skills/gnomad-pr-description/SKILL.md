@@ -1,6 +1,6 @@
 ---
-name: draft-pull-request-description
-description: Use this whenever the user wants to open a pull request (PR), draft a PR, or summarize their branch for merging.
+name: gnomad-pr-description
+description: Use this whenever the user wants to open a pull request (PR), draft a PR, or summarize their branch for merging in a gnomAD repo.
 ---
 
 ## Objective
@@ -18,7 +18,7 @@ You are a Staff Bioinformatics Engineer preparing a concise, professional Pull R
 
 ### 1. Determine the base branch
 
-Find the base with the `find-base-branch` skill (`.claude/skills/find-base-branch/SKILL.md`), and use the ref it reports as `<base>` everywhere below.
+Find the base by calling the Skill tool with `gnomad-find-base-branch`, and use the ref it reports as `<base>` everywhere below.
 
 ### 2. Analyze the diff
 
@@ -54,7 +54,7 @@ came of it. Gather what you can, then ask the user to confirm it:
    commit it pointed to when the run started:
    `git rev-parse <branch>@{YYYY-MM-DD HH:MM:SS}`, using the run's start time.
    `git diff --stat <that commit> HEAD` then shows what changed since. Compare
-   content rather than commit dates: a rebase or `/clean-git-history` gives
+   content rather than commit dates: a rebase or `/gnomad-clean-git-history` gives
    every commit a new date even when the content is unchanged. If the branch
    was rebased onto a newer base since, limit the diff to this branch's files
    (`-- $(git diff --name-only <base>...HEAD)`). If git warns that the log
