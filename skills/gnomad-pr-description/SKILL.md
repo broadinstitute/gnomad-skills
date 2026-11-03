@@ -5,13 +5,13 @@ description: Use this whenever the user wants to open a pull request (PR), draft
 
 ## Objective
 
-You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for gnomad_methods, the shared Hail utility library that gnomAD pipelines and other repos import. Your goal is a description that lets the reviewer understand:
+You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for a gnomAD repo (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad-mnv): a shared Hail library that other repos import (gnomad_methods), or a pipeline repo that nothing imports (the others). Read the repo's `CLAUDE.md` first; it says which kind this is and what its reviewers care about. Your goal is a description that lets the reviewer understand:
 
 - The intent and motivation for the change
 - The specific modules or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
 - The design/architecture chosen and why (especially if Hail-specific tradeoffs were involved)
 - The exact changes and any new output paths or resource names
-- What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`)
+- What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`), or, in a repo without a test suite, which steps were run with `--test`
 - Anything requiring specific reviewer attention (e.g. breaking changes to resource paths, schema changes to HTs, large compute cost implications)
 
 ## Workflow
@@ -31,17 +31,18 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Hail operations**: new/modified VDS, MT, HT read/write paths, aggregations, or annotations
 - **Dataproc / cluster config**: cluster size, autoscaling policy, init scripts, `hailctl dataproc submit` invocations
 - **Resource paths**: new or renamed GCS paths (especially under `gs://gnomad*/`)
-- **Public API**: new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for code that imports the library (see Project Overview in `CLAUDE.md`).
+- **Public API** (library repos only): new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for code that imports the library (see Project Overview in `CLAUDE.md`).
 - **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
-- **Test coverage**: added/changed tests under `tests/`
-- **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, follow Dependencies in `CLAUDE.md`, and list each added or re-pinned library and any pin change it needs.
-- **Downstream callers**: if a public function's signature, return schema, field names, or defaults changed, do the `gnomad_qc` check under Pull Requests in `CLAUDE.md` (against `gnomad_qc`'s `main`, not only a local checkout), and list the call sites that break with the pipeline version each belongs to.
-- **Repo layout**: if a subpackage was added, removed, renamed, or moved, check that this PR also updates the repo layout table in the README.
+- **Test coverage**: added/changed tests under `tests/`, in repos that have them
+- **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, follow Dependencies in `CLAUDE.md` if it has that section, and list each added or re-pinned library and any pin change it needs.
+- **Downstream callers** (library repos only): if a public function's signature, return schema, field names, or defaults changed, do the `gnomad_qc` check under Pull Requests in `CLAUDE.md` (against `gnomad_qc`'s `main`, not only a local checkout), and list the call sites that break with the pipeline version each belongs to.
+- **Repo layout**: if a subpackage was added, removed, renamed, or moved, and the README has a repo layout table, check that this PR also updates it.
 
 ### 4. Check for AI code reviews
 
-`CLAUDE.md` asks for `/review` on every PR, and for the description to say what
-came of it. Gather what you can, then ask the user to confirm it:
+The description says which AI reviews ran and what came of them (gnomad_methods'
+`CLAUDE.md` requires `/review` on every PR). Gather what you can, then ask the
+user to confirm it:
 
 1. **Find the latest `/review` run.** If `/review` ran earlier in this
    conversation, use its results. Otherwise look in `.code_review/`, where the
@@ -132,15 +133,14 @@ Use the following template — fill every section; do not leave placeholders:
 
 ### 6. Title and Changelog label
 
-`.github/pull_request_template.md` asks for both, because the release notes are
-generated from merged PRs and sorted by label (`.github/release.yml`):
-
 - **Title:** a short, descriptive phrase that reads well as one line of the
   release notes. If the PR already exists and its title no longer covers the
   branch, suggest a new one.
-- **Label:** one of the `Changelog:` labels defined in `.github/release.yml`,
-  with a one-line reason. Changes that don't touch the published package, such
-  as CI or contributor tooling, take `Changelog: ignore`.
+- **Label**, only in a repo with `.github/release.yml` (its release notes are
+  generated from merged PRs and sorted by label): one of the `Changelog:`
+  labels defined there, with a one-line reason. Changes that don't touch the
+  published package, such as CI or contributor tooling, take
+  `Changelog: ignore`.
 
 ### 7. Merge strategy
 
@@ -148,6 +148,6 @@ Specify whether this PR should be **squash-merged** (preferred for single-topic 
 
 ### 8. Output
 
-Print the suggested title and label, then the complete filled-out markdown. Set
+Print the suggested title and label (if any), then the complete filled-out markdown. Set
 the title or label on the PR (`gh pr edit --title` / `--add-label`) only if the
 user asks. Do not add UI screenshot instructions — this codebase has no frontend.

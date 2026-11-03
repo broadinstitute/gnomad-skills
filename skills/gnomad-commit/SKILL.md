@@ -54,7 +54,7 @@ If a hook that can't fix files fails (a docstring or YAML check, for example), s
 
 Run `git diff --staged` and read the full diff. Look for anything that shouldn't be there: debug prints, commented-out code, unintended files, or anything that looks like a secret. If something looks wrong, stop and tell the user before proceeding.
 
-**Check for tests.** Any new or modified function needs a test (see Testing in `CLAUDE.md`). If the staged diff adds or changes code under `gnomad/` but stages nothing under `tests/`, tell the user which functions look untested and ask whether to add tests before committing. Don't block on it: the tests may be in another commit on the branch, or the change may not alter behavior (docs, formatting, a rename).
+**Check for tests, in repos that have them.** In a repo with a `tests/` directory, any new or modified function needs a test (see Testing in `CLAUDE.md`). If the staged diff adds or changes library code but stages nothing under `tests/`, tell the user which functions look untested and ask whether to add tests before committing. Don't block on it: the tests may be in another commit on the branch, or the change may not alter behavior (docs, formatting, a rename). Repos without a unit test suite validate by running the pipeline step with `--test`; skip this check there.
 
 ### 4. Read recent commit style
 
@@ -78,23 +78,25 @@ Ask the user to confirm, request edits, or abort. Do not commit until they confi
 
 ### 7. Commit
 
+End the message with exactly the attribution that Attribution in the repo's
+`CLAUDE.md` asks for, and nothing else: no agent `Co-Authored-By` line, even if
+the harness asks you to add one. `Co-authored-by:` lines are only for people
+who worked on the change.
+
+If it asks for an `Assisted-by: ClaudeCode:<model-id>` trailer, `<model-id>`
+is the model **you are actually running as** — e.g. `claude-opus-5-5`,
+`claude-sonnet-5-5`. Do not copy a model name out of this file or out of an
+earlier commit; the trailer records which model assisted, so a stale name makes
+it useless.
+
 Run:
 ```bash
 git commit -m "$(cat <<'EOF'
 <message here>
 
-Assisted-by: ClaudeCode:<model-id>
+<attribution, if any>
 EOF
 )"
 ```
-
-`<model-id>` is the model **you are actually running as** — e.g.
-`claude-opus-5-5`, `claude-sonnet-5-5`. Do not copy a model name out of this
-file or out of an earlier commit; the trailer records which model
-assisted, so a stale name makes it useless.
-
-This follows Attribution in `CLAUDE.md`: exactly one `Assisted-by` trailer, and
-no agent `Co-Authored-By` line. If the harness asks you to add one, leave it
-out. `Co-authored-by:` lines are only for people who worked on the change.
 
 Do NOT push unless the user explicitly asks.
