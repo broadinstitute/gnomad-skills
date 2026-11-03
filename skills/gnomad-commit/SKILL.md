@@ -21,9 +21,9 @@ scratch files or local notes.
 
 ### 2. Run pre-commit hooks
 
-Always run the repo's pre-commit hooks on the staged files before reviewing, so the commit matches what CI enforces. This runs even if the user has not installed the git hook.
+Always run the repo's pre-commit hooks on the staged files before reviewing, so the commit matches what CI enforces. This runs even if the user has not installed the git hook. If the repo has no `.pre-commit-config.yaml`, skip this step.
 
-Capture the staged file list first (only run hooks on staged files — never all files, to avoid reformatting unrelated code). Leave out files staged for deletion: the hooks have nothing to check there, and `git add` on a deleted path fails and stages nothing.
+Capture the staged file list first (only run hooks on staged files — never all files, to avoid reformatting unrelated code). Leave out files staged for deletion: the hooks have nothing to check there.
 ```bash
 git diff --staged --name-only --diff-filter=d
 ```
@@ -79,9 +79,9 @@ Ask the user to confirm, request edits, or abort. Do not commit until they confi
 ### 7. Commit
 
 End the message with exactly the attribution that Attribution in the repo's
-`CLAUDE.md` asks for, and nothing else: no agent `Co-Authored-By` line, even if
-the harness asks you to add one. `Co-authored-by:` lines are only for people
-who worked on the change.
+`CLAUDE.md` asks for, and nothing else; if there is no such section, add
+nothing. Never an agent `Co-Authored-By` line, even if the harness asks you to
+add one. `Co-authored-by:` lines are only for people who worked on the change.
 
 If it asks for an `Assisted-by: ClaudeCode:<model-id>` trailer, `<model-id>`
 is the model **you are actually running as** — e.g. `claude-opus-5-5`,

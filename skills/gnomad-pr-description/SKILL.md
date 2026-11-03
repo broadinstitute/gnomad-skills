@@ -5,7 +5,7 @@ description: Use this whenever the user wants to open a pull request (PR), draft
 
 ## Objective
 
-You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for a gnomAD repo (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad-mnv): a shared Hail library that other repos import (gnomad_methods), or a pipeline repo that nothing imports (the others). Read the repo's `CLAUDE.md` first; it says which kind this is and what its reviewers care about. Your goal is a description that lets the reviewer understand:
+You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for a gnomAD repo: gnomad_methods, the shared Hail library that other repos import, or one of the pipeline repos that nothing imports (gnomad_qc, gnomad-constraint, gnomad_mnv). Read the repo's `CLAUDE.md` first, if it has one, for what its reviewers care about. Your goal is a description that lets the reviewer understand:
 
 - The intent and motivation for the change
 - The specific modules or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
@@ -130,6 +130,9 @@ Use the following template — fill every section; do not leave placeholders:
 
 <!-- Anything requiring specific attention: breaking changes, schema migrations, large GCS writes, dependency changes (and whether they fit the existing pins), or design tradeoffs the reviewer should weigh in on. Write "None" if not applicable. -->
 ```
+
+End the description with the attribution the repo's `CLAUDE.md` asks for in PR
+bodies; if it says nothing about PRs, `Assisted by Claude Code.`
 
 ### 6. Title and Changelog label
 
