@@ -1,6 +1,6 @@
 ---
 name: gnomad-pr-review
-description: Thorough multi-agent review of a large gnomAD Hail pipeline PR (gnomad_qc, gnomad-constraint, gnomad_methods) - one reviewer agent per file, local repros, end-to-end checks of High findings, and a ranked REVIEW.md with draft PR comments. Read-only - never posts, never submits to Dataproc or Batch.
+description: Thorough multi-agent review of a large gnomAD Hail pipeline PR (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad_mnv) - one reviewer agent per file, local repros, end-to-end checks of High findings, and a ranked REVIEW.md with draft PR comments. Read-only - never posts, never submits to Dataproc or Batch.
 argument-hint: "[PR number, URL, or branch] [model=opus|sonnet|fable, or core:M,pipeline:M,tests:M,docs:M] [second-opinion=no|fable|sonnet] [second-opinion-scope=medium|high]"
 disable-model-invocation: true
 ---
@@ -92,23 +92,23 @@ Wait for answers.
 
 1. **Check out the review commit** the way the user chose. Record its short SHA.
 2. **Test environment**, if approved:
-   - Create the venv in `{REVIEW_DIR}/venv` with `uv venv --python <CI's version>` (or `python -m venv` if uv isn't installed).
-   - Install in the same order CI does, then check that `hl.version()` matches CI's Hail.
+   - Create the venv in `{REVIEW_DIR}/venv` with `uv venv --python <CI's version>` (or `python -m venv` if uv isn't installed). If the repo has no CI config, use the Python and Hail versions of the user's environment.
+   - Install in the same order CI does (or the repo's `requirements*.txt` if there is no CI), then check that `hl.version()` matches CI's Hail.
    - Check whether gnomad_methods excludes the Hail version CI installs (e.g. `hail!=0.2.139` in its `requirements.txt`). That's a finding by itself.
-3. **Run the tests**, if the repo has any (gnomad_qc itself has no unit tests; gnomad-constraint does). Run them in the background, and force the local backend:
+3. **Run the tests**, if the repo has a `tests/` directory (gnomad_methods does; gnomad_qc has no unit tests). Run them in the background, and force the local backend:
    ```bash
    HAIL_QUERY_BACKEND=spark \
    PYSPARK_SUBMIT_ARGS="--conf spark.driver.bindAddress=127.0.0.1 --conf spark.driver.host=127.0.0.1 --driver-memory 4g pyspark-shell" \
    python -m pytest -q -rfEsxX --durations=10 -p no:cacheprovider
    ```
    Report passed, failed, skipped, xfail and xpass counts. Explain every skip; a wrong environment shows up as skips, not failures. Zero xfail means any bug found is either untested or locked in by a test.
-4. **Run CI's lint commands**, copied from `.github/workflows/ci.yml`. Also run pylint once with warnings enabled, to spot dead code.
+4. **Run CI's lint commands**, copied from `.github/workflows/ci.yml`, or the pre-commit hooks if the repo has those but no CI. Also run pylint once with warnings enabled, to spot dead code.
 5. **Build the call map.** This skill's `callmap.py` does it; run it from the PR repo root:
    ```bash
-   python <skill_dir>/callmap.py <src files...> --split <big_file>:<line>,<line> > {REVIEW_DIR}/callmap.txt
+   python ${CLAUDE_SKILL_DIR}/callmap.py <src files...> --split <big_file>:<line>,<line> > {REVIEW_DIR}/callmap.txt
    ```
    It lists every function used across areas, with callers as `file:line(function)`, including tests.
-6. **Write the brief.** Copy `reviewer_brief.md` from this skill to `{REVIEW_DIR}/brief.md` and fill in every placeholder.
+6. **Write the brief.** Copy `${CLAUDE_SKILL_DIR}/reviewer_brief.md` to `{REVIEW_DIR}/brief.md` and fill in every placeholder.
    With no review venv, point `{PYTHON}` and `{HAIL_SRC}` at the user's existing Hail environment.
 
 ## Phase 3: Reviewer agents
@@ -175,7 +175,7 @@ Do steps 1–3 and 5 for each High finding before presenting results, and step 4
 
 ## Phase 7: Write up
 
-- Write `{REVIEW_DIR}/REVIEW.md` using this skill's `review_template.md`, with sections High, Medium, Low (grouped by area), Nit, open questions for the author, considered-not-raised, and checked-and-fine.
+- Write `{REVIEW_DIR}/REVIEW.md` using `${CLAUDE_SKILL_DIR}/review_template.md`, with sections High, Medium, Low (grouped by area), Nit, open questions for the author, considered-not-raised, and checked-and-fine.
 - Every finding gets a location, the function name, a short "what", and a draft comment.
 - Mark lines that aren't in the diff, and files the PR doesn't touch (those need a general comment).
 - Fill in the "Models" line in the header: the coordinator model, which reviewers ran on which model, and whether a second opinion was run.

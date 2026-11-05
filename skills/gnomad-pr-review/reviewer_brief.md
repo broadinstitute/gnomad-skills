@@ -53,7 +53,7 @@ The coordinator sends you the agent IDs once everyone is running. Areas:
 
 Do NOT report: formatting that black/isort handle, pure style taste with no real effect, or anything already raised in the existing PR comments at `{REVIEW_DIR}/existing_comments.md` (unless you have something materially new to add; then say so).
 
-In pipeline repos (gnomad_qc, gnomad-constraint), don't report Nits, and report a Low only if it has a real effect on cost or would lead a reader to misread the code. Style and maintainability taste don't count (CLAUDE.md: "Do not over-optimize for style"). In gnomad_methods, which is a library, report Low and Nit as usual.
+In pipeline repos (every gnomAD repo except gnomad_methods), don't report Nits, and report a Low only if it has a real effect on cost or would lead a reader to misread the code. Style and maintainability taste don't count (CLAUDE.md: "Do not over-optimize for style"). In gnomad_methods, which is a library, report Low and Nit as usual.
 
 ## Priority levels
 - **High**: wrong numbers in a released metric, a crash or a write to the wrong place on a normal run, overwrite or data-loss risk, a big cost problem, a CI break, or a test that pins a real bug as correct.
