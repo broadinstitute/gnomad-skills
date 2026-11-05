@@ -1,6 +1,6 @@
 ---
 name: gnomad-find-base-branch
-description: Use this to work out which branch the current branch is based on, for example before drafting a PR description or rewriting history. The gnomad-pr-description and gnomad-clean-git-history skills use it.
+description: Use this to work out which branch the current branch is based on in a gnomAD repo, for example before drafting a PR description or rewriting history. The gnomad-pr-description and gnomad-clean-git-history skills use it.
 ---
 
 ## Objective

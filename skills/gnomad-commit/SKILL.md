@@ -42,6 +42,7 @@ pre-commit run --files <staged files>
 - If `pre-commit` is not on PATH, try `python -m pre_commit run --files <staged files>`.
 - If pre-commit is unavailable entirely, fall back to running the tools listed in `.pre-commit-config.yaml` directly on the staged files, using the versions pinned in `requirements-dev.txt` / the config's `rev:` (a throwaway venv is fine). Ensure Python version is compatible with the pre-commit tools. Pass each tool only the staged files that match its hook's `files:` and `exclude:` patterns, with the hook's `args:`; some hooks only cover part of the repo, and running them on other files reformats code CI leaves alone.
 - If neither pre-commit nor the individual tools can be run, tell the user the hooks could not run and why, and ask how to proceed — do NOT silently commit unformatted code.
+- If one hook can't run because its tool isn't installed (for example R hooks that need `Rscript` and their packages), say which hooks didn't run; don't count them as passed.
 
 Auto-fixing hooks (formatters and whitespace fixers) modify the working tree, which unstages those edits. Re-stage the same paths and re-run until the hooks pass cleanly:
 ```bash
@@ -54,7 +55,7 @@ If a hook that can't fix files fails (a docstring or YAML check, for example), s
 
 Run `git diff --staged` and read the full diff. Look for anything that shouldn't be there: debug prints, commented-out code, unintended files, or anything that looks like a secret. If something looks wrong, stop and tell the user before proceeding.
 
-**Check for tests, in repos that have them.** In a repo with a `tests/` directory, any new or modified function needs a test (see Testing in `CLAUDE.md`). If the staged diff adds or changes library code but stages nothing under `tests/`, tell the user which functions look untested and ask whether to add tests before committing. Don't block on it: the tests may be in another commit on the branch, or the change may not alter behavior (docs, formatting, a rename). Repos without a unit test suite validate by running the pipeline step with `--test`; skip this check there.
+**Check for tests.** In a repo with a `tests/` directory, any new or modified function needs a test (see Testing in `CLAUDE.md`). If the staged diff adds or changes library code but stages nothing under `tests/`, tell the user which functions look untested and ask whether to add tests before committing. Don't block on it: the tests may be in another commit on the branch, or the change may not alter behavior (docs, formatting, a rename). If the diff changes a pipeline step, also ask whether it was run with `--test`; unit tests don't replace running the step.
 
 ### 4. Read recent commit style
 

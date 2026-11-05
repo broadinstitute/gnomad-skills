@@ -80,4 +80,4 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 
 ### 5. Handoff
 
-Do NOT push. Tell the user to run `git push --force-with-lease` themselves once they are satisfied. Offer to draft a PR description using the gnomad-pr-description skill.
+Do NOT push. Tell the user to run `git push --force-with-lease` themselves once they are satisfied. Offer to draft a PR description by calling the Skill tool with `gnomad-pr-description`.

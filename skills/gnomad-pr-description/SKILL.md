@@ -5,13 +5,13 @@ description: Use this whenever the user wants to open a pull request (PR), draft
 
 ## Objective
 
-You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for a gnomAD repo: gnomad_methods, the shared Hail library that other repos import, or one of the pipeline repos that nothing imports (gnomad_qc, gnomad-constraint, gnomad_mnv). Read the repo's `CLAUDE.md` first, if it has one, for what its reviewers care about. Your goal is a description that lets the reviewer understand:
+You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for a gnomAD repo (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad_mnv, regional_missense_constraint, gnomad_chets). A repo can hold library code that other repos import (all of gnomad_methods; gnomad-constraint's utilities, which regional_missense_constraint imports), pipeline code, or both, so the checks below go by what the diff touches. Read the repo's `CLAUDE.md` first, if it has one, for what its reviewers care about. Your goal is a description that lets the reviewer understand:
 
 - The intent and motivation for the change
 - The specific modules or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
 - The design/architecture chosen and why (especially if Hail-specific tradeoffs were involved)
 - The exact changes and any new output paths or resource names
-- What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`), or, in a repo without a test suite, which steps were run with `--test`
+- What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`) and, for pipeline steps, which were run and at what scale (`--test` or full)
 - Anything requiring specific reviewer attention (e.g. breaking changes to resource paths, schema changes to HTs, large compute cost implications)
 
 ## Workflow
@@ -31,11 +31,12 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Hail operations**: new/modified VDS, MT, HT read/write paths, aggregations, or annotations
 - **Dataproc / cluster config**: cluster size, autoscaling policy, init scripts, `hailctl dataproc submit` invocations
 - **Resource paths**: new or renamed GCS paths (especially under `gs://gnomad*/`)
-- **Public API** (library repos only): new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for code that imports the library (see Project Overview in `CLAUDE.md`).
+- **Public API** (code other repos import): new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for the importing code (see Project Overview in `CLAUDE.md`).
+- **Released outputs** (pipeline code): what changes in a released Table's values or schema, which releases it affects, whether they would need regenerating, and whether the release docs were updated.
 - **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
 - **Test coverage**: added/changed tests under `tests/`, in repos that have them
 - **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, follow Dependencies in `CLAUDE.md` if it has that section, and list each added or re-pinned library and any pin change it needs.
-- **Downstream callers** (library repos only): if a public function's signature, return schema, field names, or defaults changed, do the `gnomad_qc` check under Pull Requests in `CLAUDE.md` (against `gnomad_qc`'s `main`, not only a local checkout), and list the call sites that break with the pipeline version each belongs to.
+- **Downstream callers** (code other repos import): if a public function's signature, return schema, field names, or defaults changed, do the `gnomad_qc` check under Pull Requests in `CLAUDE.md` (against `gnomad_qc`'s `main`, not only a local checkout), and list the call sites that break with the pipeline version each belongs to.
 - **Repo layout**: if a subpackage was added, removed, renamed, or moved, and the README has a repo layout table, check that this PR also updates it.
 
 ### 4. Check for AI code reviews
