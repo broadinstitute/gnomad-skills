@@ -1,7 +1,7 @@
 ---
 name: gnomad-pr-review
 description: Thorough multi-agent review of a large gnomAD Hail pipeline PR (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad_mnv) - one reviewer agent per file, local repros, end-to-end checks of High findings, and a ranked REVIEW.md with draft PR comments. Read-only - never posts, never submits to Dataproc or Batch.
-argument-hint: "[PR number, URL, or branch] [model=opus|sonnet|fable, or core:M,pipeline:M,tests:M,docs:M] [second-opinion=no|fable|sonnet] [second-opinion-scope=medium|high]"
+argument-hint: "[PR number, URL, or branch] [model=opus|sonnet|fable, or core:M,pipeline:M,tests:M,docs:M] [second-opinion=no|fable|sonnet] [second-opinion-scope=medium|high] [findings=all|one]"
 disable-model-invocation: true
 ---
 
@@ -15,6 +15,7 @@ The invocation can also carry options as `key=value` words after the PR:
 - `model=...`: which model the reviewer agents use for each part (see "Model choice"). One model (`model=fable`) applies to every part; `part:model` pairs (`model=core:fable,tests:opus`) override those parts and leave the rest at their defaults.
 - `second-opinion=no|fable|sonnet`: off, or the model that checks Opus agents' findings; Sonnet and Fable findings are checked by Opus (Phase 6).
 - `second-opinion-scope=medium|high`: which findings get a second opinion: High and Medium (default), or High only.
+- `findings=all|one`: how the findings reach the user at the end: the full chat summary at once (default), or one finding per turn, next on request (Phase 7).
 
 Any option given here answers the matching Phase 1 question, so don't ask it again. If a value isn't recognized, ask.
 
@@ -64,7 +65,7 @@ The user picks `opus`, `sonnet` or `fable` for each part:
    - For big files, list the functions with `grep -n "^def "`.
 4. Check whether the local branch matches the PR head. If it's ahead (unpushed commits), offer to review it as is in Q1, and size it with `git diff --stat origin/<base>...HEAD`. Call the commit you review the *review commit*; every line number refers to it.
 5. Check the local environment: the Python and Hail version, and the gnomad_methods version and commit. Compare them with what the PR needs (CI config, requirements, any functions it imports from gnomad_methods).
-   Pick the one gnomad_methods commit the PR will run with (usually `main`; a branch, if the PR depends on an unmerged gnomad_methods PR). Reviewers read only that copy; if the local checkout is on a different commit, make a `git worktree` at that commit.
+   Pick the one gnomad_methods commit the PR will run with (usually `main`; a branch, if the PR depends on an unmerged gnomad_methods PR). Reviewers read only that copy; if the local checkout is on a different commit, note that a worktree at that commit is needed (made in Phase 2).
 
 ## Phase 1: Present the plan and ask
 
@@ -78,19 +79,20 @@ Tell the user:
 
 Then ask, giving your recommended answer for each. Skip any question the invocation options already answered.
 1. **Checkout.** Fast-forward the local branch to the PR head, use a separate worktree at the PR head, or, if the local branch is ahead, review it as is? Reviewing local commits means line numbers match GitHub only after they're pushed.
-2. **Tests.** Static review only, or set up a separate venv and run the tests and local repros (local Spark, hand-built Tables only)?
+2. **Tests.** Static review only (no Hail is run at all: High findings are confirmed by reading the code, tagged `[code]`, and the write-up says no repro was run), or set up a separate venv and run the tests and local repros (local Spark, hand-built Tables only)?
 3. **Scope.** Everything, including tests, docs and config, or source code only?
 4. **Reviewer models.** The defaults (recommended), all Opus, all Fable, or set each part? In the plan, show which areas get which model under the defaults.
 5. **Second opinion on High and Medium findings.** No, or yes with Fable (recommended) or Sonnet checking the Opus findings? Each costs one extra agent per finding.
    If yes, also ask whether to cover High and Medium (default) or High only.
+6. **Findings.** All at once in the chat summary, or one at a time, each shown when they ask for the next? Reading a long list of findings is tiring; one at a time keeps each one in focus. `REVIEW.md` is written in full either way.
 
-AskUserQuestion takes at most 4 questions per call. If all 5 are still open, put the second-opinion question in a short follow-up call. If the user chooses to set each part, ask one question per part (`core`, `pipeline`, `tests`, `docs`; options Opus, Sonnet, Fable) in their own follow-up call.
+AskUserQuestion takes at most 4 questions per call. If more than 4 are still open, put the second-opinion and findings questions in a short follow-up call. If the user chooses to set each part, ask one question per part (`core`, `pipeline`, `tests`, `docs`; options Opus, Sonnet, Fable) in their own follow-up call.
 
 Wait for answers.
 
 ## Phase 2: Setup
 
-1. **Check out the review commit** the way the user chose. Record its short SHA.
+1. **Check out the review commit** the way the user chose; a worktree goes under `{REVIEW_DIR}/repo`. Record its short SHA. `{REPO_PATH}` in the brief is wherever the review commit is checked out, and the call map, tests and repros all run from there. If the gnomad_methods commit the PR runs with isn't the local checkout's, make a worktree for it under `{REVIEW_DIR}/gnomad_methods` and point `{GNOMAD_METHODS_PATH}` at it.
 2. **Test environment**, if approved:
    - Create the venv in `{REVIEW_DIR}/venv` with `uv venv --python <CI's version>` (or `python -m venv` if uv isn't installed). If the repo has no CI config, use the Python and Hail versions of the user's environment.
    - Install in the same order CI does (or the repo's `requirements*.txt` if there is no CI), then check that `hl.version()` matches CI's Hail.
@@ -142,6 +144,7 @@ Wait for answers.
 Don't trust agent output by itself; mistakes come back sounding just as confident as real findings.
 
 - Re-read the code at every cited line. Confirm line numbers with `grep -n`, and confirm in-diff status from the `git diff -U0` hunks.
+- **Check each precondition in the real environment** (`which <tool>`, the installed packages, the files actually in the PR). A finding whose trigger isn't there is ranked by what happens when it is, not by the mechanism; downgrade it if the trigger can't occur on a normal run.
 - **Run repros one JVM at a time.** Batch several into one script so Hail starts once. Print `RESULT ...` lines and grep for them.
 - **Run repros with `PYTHONPATH={GNOMAD_METHODS_PATH}:{REPO_PATH}`**, replacing any existing value, so they import the gnomad_methods copy the reviewers read. Print `gnomad.__path__` first and check that it starts there.
 - For CI claims, read the logs with `gh run view <id> --log-failed` (read-only). Check that the run's branch has the same tests and config as the PR.
@@ -156,7 +159,7 @@ Do steps 1–3 and 5 for each High finding before presenting results, and step 4
    - Does other code (upstream, downstream, or in gnomad_methods) already handle it?
    - What did the base branch do? Is this actually new? If releases were cut from the PR branch, also compare against the last release, not only `origin/<base>`.
    - Does the draft comment overstate the problem?
-2. **Reproduce it through the real public functions, chained the way the pipeline chains them** (with Phase 5's `PYTHONPATH`), not only the helper where the bug lives.
+2. **Unless the user chose static review only, reproduce it through the real public functions, chained the way the pipeline chains them** (with Phase 5's `PYTHONPATH`), not only the helper where the bug lives.
    - Reuse test fixtures by importing the test module (add `tests/...` to `sys.path`).
    - Monkeypatch fixture constants to add the case you need.
    - Checkpoint intermediate Tables to `{REVIEW_DIR}/repros/` so a failed later step doesn't redo everything.
@@ -186,4 +189,5 @@ Do steps 1–3 and 5 for each High finding before presenting results, and step 4
   - the Medium findings as a table (location, issue);
   - the Low and Nit findings as counts plus the main themes;
   - decisions that belong to the author;
-  - a cleanup note for the venvs in `/tmp`.
+  - a cleanup note for the venv and any worktrees under `{REVIEW_DIR}` (worktrees need `git worktree remove`).
+- **If the user chose one finding at a time:** give the opening line, what was run, and the counts, then the first High finding with its full draft comment, and stop. Show the next finding, in ranked order, each time they ask; after the last Medium, offer the Low and Nit findings as a list. Close with the author's decisions and the cleanup note.

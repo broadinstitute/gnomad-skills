@@ -49,17 +49,19 @@ The coordinator sends you the agent IDs once everyone is running. Areas:
 4. **Cost on full data.** Extra shuffles, `.count()` used for logging, collecting big data to the driver, a missing checkpoint that makes Hail recompute a big pipeline, explode blowups, `order_by` on huge tables, no `naive_coalesce` after a heavy filter, hard-coded partition counts, `repartition()` on a large dataset.
 5. **Tests** that don't test what they claim, assert a wrong expected value, or pin a bug as correct. Ask "would this test still pass if the code were broken?" Common holes: every group has one row, so a scaling step is never exercised; symmetric values that hide a sign or mirroring bug; the same value in every group, so a wrong index passes; a fixture with a field the pipeline never produces.
 6. **Docs** that disagree with the code, or that describe code that isn't on this branch.
-7. **Maintainability.** Dead code, duplicated logic, misleading names, docstrings, or comments, wrong type annotations, violations of the CLAUDE.md conventions. Also new code that repeats an existing gnomad_qc or gnomad_methods helper, or that is much larger than the change needs; this counts in pipeline repos too.
+7. **Maintainability.** Dead code, duplicated logic, misleading names, docstrings, or comments, wrong type annotations, violations of the CLAUDE.md conventions. Also new code that repeats an existing gnomad_qc or gnomad_methods helper, or that is much larger than the change needs.
 
 Do NOT report: formatting that black/isort handle, pure style taste with no real effect, or anything already raised in the existing PR comments at `{REVIEW_DIR}/existing_comments.md` (unless you have something materially new to add; then say so).
 
-In pipeline repos (every gnomAD repo except gnomad_methods), don't report Nits, and report a Low only if it has a real effect on cost or would lead a reader to misread the code. Style and maintainability taste don't count (CLAUDE.md: "Do not over-optimize for style"). In gnomad_methods, which is a library, report Low and Nit as usual.
+In pipeline repos (every gnomAD repo except gnomad_methods), don't report Nits, and report a Low only if it has a real effect on cost, would lead a reader to misread the code, or is code that repeats an existing helper or is much larger than the change needs. Other style and maintainability taste doesn't count. In gnomad_methods, which is a library, report Low and Nit as usual.
 
 ## Priority levels
 - **High**: wrong numbers in a released metric, a crash or a write to the wrong place on a normal run, overwrite or data-loss risk, a big cost problem, a CI break, or a test that pins a real bug as correct.
 - **Medium**: edge-case bug, a misleading doc that could cause misuse, a missing test for risky logic, an undocumented behavior change.
 - **Low**: cleanup, clarity, a small cost improvement.
 - **Nit**: tiny.
+
+Rank by consequence, not mechanism.
 
 ## Confidence
 - **Confirmed**: you traced the full code path, including the called functions in other files and repos.
@@ -83,7 +85,7 @@ Then one block per finding, sorted by priority:
 - Confidence: Confirmed / Likely / Question
 - What: 1–3 plain sentences.
 - Why it matters: 1 sentence (what goes wrong, for whom).
-- When it happens: the real input, flag, or data that triggers it, and whether gnomAD data or a normal run actually has it.
+- When it happens: the real input, flag, or data that triggers it, and whether gnomAD data or a normal run actually has it. List every precondition (a tool installed, a file type in the PR, a non-default flag) and whether it holds here.
 - Evidence: the path you traced (file:line → file:line). Quote at most 5 lines.
 - Repro (optional): a small local Hail snippet using only hand-built Tables.
 - Draft PR comment: 1–4 plain sentences to the author, with a suggested fix, written as a human reviewer would.
