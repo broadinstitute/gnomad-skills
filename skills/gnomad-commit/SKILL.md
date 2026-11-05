@@ -84,12 +84,6 @@ End the message with exactly the attribution that Attribution in the repo's
 nothing. Never an agent `Co-Authored-By` line, even if the harness asks you to
 add one. `Co-authored-by:` lines are only for people who worked on the change.
 
-If it asks for an `Assisted-by: ClaudeCode:<model-id>` trailer, `<model-id>`
-is the model **you are actually running as** — e.g. `claude-opus-5-5`,
-`claude-sonnet-5-5`. Do not copy a model name out of this file or out of an
-earlier commit; the trailer records which model assisted, so a stale name makes
-it useless.
-
 Run:
 ```bash
 git commit -m "$(cat <<'EOF'
