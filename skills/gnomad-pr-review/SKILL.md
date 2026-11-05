@@ -97,7 +97,7 @@ Wait for answers.
    - Create the venv in `{REVIEW_DIR}/venv` with `uv venv --python <CI's version>` (or `python -m venv` if uv isn't installed). If the repo has no CI config, use the Python and Hail versions of the user's environment.
    - Install in the same order CI does (or the repo's `requirements*.txt` if there is no CI), then check that `hl.version()` matches CI's Hail.
    - Check whether gnomad_methods excludes the Hail version CI installs (e.g. `hail!=0.2.139` in its `requirements.txt`). That's a finding by itself.
-3. **Run the tests**, if the repo has a `tests/` directory (gnomad_methods does; gnomad_qc has no unit tests). Run them in the background, and force the local backend:
+3. **Run the tests**, if the repo has a `tests/` directory. Run them in the background, and force the local backend:
    ```bash
    HAIL_QUERY_BACKEND=spark \
    PYSPARK_SUBMIT_ARGS="--conf spark.driver.bindAddress=127.0.0.1 --conf spark.driver.host=127.0.0.1 --driver-memory 4g pyspark-shell" \
