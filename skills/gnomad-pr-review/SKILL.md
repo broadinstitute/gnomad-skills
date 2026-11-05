@@ -1,6 +1,6 @@
 ---
 name: gnomad-pr-review
-description: Thorough multi-agent review of a large gnomAD Hail pipeline PR (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad_mnv) - one reviewer agent per file, local repros, end-to-end checks of High findings, and a ranked REVIEW.md with draft PR comments. Read-only - never posts, never submits to Dataproc or Batch.
+description: Thorough multi-agent review of a large gnomAD Hail pipeline PR (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad_mnv, regional_missense_constraint, gnomad_chets) - one reviewer agent per file, local repros, end-to-end checks of High findings, and a ranked REVIEW.md with draft PR comments. Read-only - never posts, never submits to Dataproc or Batch.
 argument-hint: "[PR number, URL, or branch] [model=opus|sonnet|fable, or core:M,pipeline:M,tests:M,docs:M] [second-opinion=no|fable|sonnet] [second-opinion-scope=medium|high] [findings=all|one]"
 disable-model-invocation: true
 ---
