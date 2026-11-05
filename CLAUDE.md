@@ -1,7 +1,6 @@
 # CLAUDE.md
 
-Shared Claude Code skills for the gnomAD repos (gnomad_qc, gnomad_methods,
-gnomad-constraint, gnomad_mnv), installed as personal skills by symlinking
+Shared Claude Code skills for the gnomAD repos, installed as personal skills by symlinking
 `skills/<name>` into `~/.claude/skills` (`scripts/link-skills.sh`). Nothing
 here is published or packaged; `git pull` is the update mechanism.
 
@@ -24,8 +23,8 @@ here is published or packaged; `git pull` is the update mechanism.
 - Skills are read-only with respect to the user's branches unless they say
   otherwise: no pushing, no posting to GitHub, no Dataproc or Batch
   submissions, and never individual-level data read locally.
-- Don't add CI, packaging or docs tooling; the repo is Markdown and one
-  standard-library script.
+- Don't add CI, packaging or docs tooling; the repo is Markdown, one
+  standard-library script and a pre-commit config.
 
 ## Commits and attribution
 
@@ -33,3 +32,5 @@ here is published or packaged; `git pull` is the update mechanism.
   the context.
 - No agent trailers or agent co-author lines on commits. Mention the
   assistance in the PR body instead: `Assisted by Claude Code.`
+  (`.claude/settings.json` sets `attribution.pr` to that line and
+  `attribution.commit` to nothing, so Claude Code does this by itself.)

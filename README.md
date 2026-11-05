@@ -1,9 +1,13 @@
 # gnomad-skills
 
 Shared [Claude Code skills](https://code.claude.com/docs/en/skills) for the
-gnomAD repos: gnomad_qc, gnomad_methods, gnomad-constraint and gnomad_mnv.
-One checkout, linked into `~/.claude/skills`, so the same skills are available
-in every repo and a `git pull` updates them.
+gnomAD repos. One checkout, linked into `~/.claude/skills`, so the same skills
+are available in every repo and a `git pull` updates them.
+
+The skills are written for, and used in, gnomad_qc, gnomad_methods,
+gnomad-constraint, gnomad_mnv, regional_missense_constraint and gnomad_chets.
+They work in any gnomAD repo; add a repo to this list, and to the skills'
+descriptions, once the skills have been used there.
 
 ## Skills
 
