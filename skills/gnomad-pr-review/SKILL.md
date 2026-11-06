@@ -1,0 +1,193 @@
+---
+name: gnomad-pr-review
+description: Thorough multi-agent review of a large gnomAD Hail pipeline PR (gnomad_qc, gnomad_methods, gnomad-constraint, gnomad_mnv, regional_missense_constraint, gnomad_chets) - one reviewer agent per file, local repros, end-to-end checks of High findings, and a ranked REVIEW.md with draft PR comments. Read-only - never posts, never submits to Dataproc or Batch.
+argument-hint: "[PR number, URL, or branch] [model=opus|sonnet|fable, or core:M,pipeline:M,tests:M,docs:M] [second-opinion=no|fable|sonnet] [second-opinion-scope=medium|high] [findings=all|one]"
+disable-model-invocation: true
+---
+
+# gnomAD PR review
+
+Review a pull request the way a careful senior reviewer would, using one agent per file or area, and hand the user a ranked list of findings they can edit and paste into GitHub.
+
+The target is the PR the user named in the invocation (number, URL, or branch). If they didn't name one, use the PR for the current branch (`gh pr view`). The PR can be in a sibling repo (e.g. `../gnomad-constraint`); work in that repo's directory.
+
+The invocation can also carry options as `key=value` words after the PR:
+- `model=...`: which model the reviewer agents use for each part (see "Model choice"). One model (`model=fable`) applies to every part; `part:model` pairs (`model=core:fable,tests:opus`) override those parts and leave the rest at their defaults.
+- `second-opinion=no|fable|sonnet`: off, or the model that checks Opus agents' findings; Sonnet and Fable findings are checked by Opus (Phase 6).
+- `second-opinion-scope=medium|high`: which findings get a second opinion: High and Medium (default), or High only.
+- `findings=all|one`: how the findings reach the user at the end: the full chat summary at once (default), or one finding per turn, next on request (Phase 7).
+
+Any option given here answers the matching Phase 1 question, so don't ask it again. If a value isn't recognized, ask.
+
+## How the user wants this done
+
+- **Plan first.** Size up the PR, then tell the user your plan and wait for a go-ahead before starting the review. If the plan changes along the way, tell them.
+- **Read-only.** Never post comments or reviews, never commit or push, never submit to Dataproc or Hail Batch, never run `hailctl`, and never write to GCS. Reading GCS (even small reads) also needs the user's OK first. All of Us or other individual-level data must never be read locally, ever.
+- **One agent per file, and the agents talk.** When one file uses another file's functions, the owning agents check the hand-off with each other.
+- **Ranked output with locations.** Every finding gets a priority, a file:line (at the review commit), the function name, and a draft PR comment.
+- **Write plainly and briefly** in chat, in the file, and in draft comments. Drafts are for the user to edit; write them as a human reviewer would.
+- **Check the High findings end to end** before calling the review done (Phase 6). The user expects this every time.
+- When the user asks to see the review file, **print its contents in your reply.** Tool output isn't shown to them.
+
+## Model choice
+
+The user picks `opus`, `sonnet` or `fable` for each part:
+
+| Part | What it covers | Default |
+|---|---|---|
+| `core` | Code that computes the numbers | **Opus** |
+| `pipeline` | The main CLI script and step-to-step wiring | **Opus** |
+| `tests` | Test files | **Sonnet** |
+| `docs` | Docs, config, and resources/constants | **Sonnet** |
+
+- **Opus** goes where the hard cross-function tracing is. **Sonnet** is cheaper and faster, and fine for text-vs-code checks. **Fable** hasn't been compared with Opus as a reviewer yet, so it's never a reviewer default; it is the default second opinion on Opus findings (Phase 6).
+- **You (the coordinator) stay on the session's model.** Checking findings and writing up are the hardest part, so say in the plan that an Opus session works best.
+- **Don't use Haiku for reviewers;** it's too shallow for this work.
+- **If an area mixes parts,** give it the stronger model of the two (Opus or Fable over Sonnet).
+
+## Phase 0: Size up the PR (before the plan)
+
+1. Get the PR facts. Run:
+   ```bash
+   gh pr view <PR> --json number,title,author,headRefName,baseRefName,additions,deletions,changedFiles,url
+   gh pr view <PR> --json body -q .body
+   ```
+2. Collect what others have already said, so agents don't repeat it. Save it to `{REVIEW_DIR}/existing_comments.md`, where `REVIEW_DIR=/tmp/pr<N>_review`:
+   ```bash
+   gh api repos/<owner>/<repo>/pulls/<PR>/comments --paginate -q '.[] | "=== \(.path):\(.line // .original_line) [\(.user.login)]\n\(.body)\n"'
+   gh pr view <PR> --json comments -q '.comments[] | "[\(.author.login)] \(.body)"'
+   ```
+   Read the author's own comments closely; they often document known problems.
+   Their line numbers can refer to an older commit; re-check against the PR head before treating anything as already raised.
+3. Size it up:
+   - `git fetch`, then run `git diff --stat origin/<base>...origin/<head>`.
+   - Get the line count of each changed file at the PR head.
+   - For big files, list the functions with `grep -n "^def "`.
+4. Check whether the local branch matches the PR head. If it's ahead (unpushed commits), offer to review it as is in Q1, and size it with `git diff --stat origin/<base>...HEAD`. Call the commit you review the *review commit*; every line number refers to it.
+5. Check the local environment: the Python and Hail version, and the gnomad_methods version and commit. Compare them with what the PR needs (CI config, requirements, any functions it imports from gnomad_methods).
+   Pick the one gnomad_methods commit the PR will run with (usually `main`; a branch, if the PR depends on an unmerged gnomad_methods PR). Reviewers read only that copy; if the local checkout is on a different commit, note that a worktree at that commit is needed (made in Phase 2).
+
+## Phase 1: Present the plan and ask
+
+Tell the user:
+- The PR, its size, and where the code is (source vs. tests vs. docs).
+- The agent split: one per file. Split any file over about 1,000 lines into stages at function boundaries. Group small related files together. Give the tests one or two agents, and docs plus config one agent.
+- How the agents will talk to each other (call map, roster, peer messages, then a second round run by you).
+- How findings get checked (Phases 5 and 6), and the output format.
+- The ground rules: read-only, no Dataproc or Batch.
+- The cost: many agents, heavy on tokens, and it takes a while.
+
+Then ask, giving your recommended answer for each. Skip any question the invocation options already answered.
+1. **Checkout.** Fast-forward the local branch to the PR head, use a separate worktree at the PR head, or, if the local branch is ahead, review it as is? Reviewing local commits means line numbers match GitHub only after they're pushed.
+2. **Tests.** Static review only (no Hail is run at all: High findings are confirmed by reading the code, tagged `[code]`, and the write-up says no repro was run), or set up a separate venv and run the tests and local repros (local Spark, hand-built Tables only)?
+3. **Scope.** Everything, including tests, docs and config, or source code only?
+4. **Reviewer models.** The defaults (recommended), all Opus, all Fable, or set each part? In the plan, show which areas get which model under the defaults.
+5. **Second opinion on High and Medium findings.** No, or yes with Fable (recommended) or Sonnet checking the Opus findings? Each costs one extra agent per finding.
+   If yes, also ask whether to cover High and Medium (default) or High only.
+6. **Findings.** All at once in the chat summary, or one at a time, each shown when they ask for the next? Reading a long list of findings is tiring; one at a time keeps each one in focus. `REVIEW.md` is written in full either way.
+
+AskUserQuestion takes at most 4 questions per call. If more than 4 are still open, put the second-opinion and findings questions in a short follow-up call. If the user chooses to set each part, ask one question per part (`core`, `pipeline`, `tests`, `docs`; options Opus, Sonnet, Fable) in their own follow-up call.
+
+Wait for answers.
+
+## Phase 2: Setup
+
+1. **Check out the review commit** the way the user chose; a worktree goes under `{REVIEW_DIR}/repo`. Record its short SHA. `{REPO_PATH}` in the brief is wherever the review commit is checked out, and the call map, tests and repros all run from there. If the gnomad_methods commit the PR runs with isn't the local checkout's, make a worktree for it under `{REVIEW_DIR}/gnomad_methods` and point `{GNOMAD_METHODS_PATH}` at it.
+2. **Test environment**, if approved:
+   - Create the venv in `{REVIEW_DIR}/venv` with `uv venv --python <CI's version>` (or `python -m venv` if uv isn't installed). If the repo has no CI config, use the Python and Hail versions of the user's environment.
+   - Install in the same order CI does (or the repo's `requirements*.txt` if there is no CI), then check that `hl.version()` matches CI's Hail.
+   - Check whether gnomad_methods excludes the Hail version CI installs (e.g. `hail!=0.2.139` in its `requirements.txt`). That's a finding by itself.
+3. **Run the tests**, if the repo has a `tests/` directory. Run them in the background, and force the local backend:
+   ```bash
+   HAIL_QUERY_BACKEND=spark \
+   PYSPARK_SUBMIT_ARGS="--conf spark.driver.bindAddress=127.0.0.1 --conf spark.driver.host=127.0.0.1 --driver-memory 4g pyspark-shell" \
+   python -m pytest -q -rfEsxX --durations=10 -p no:cacheprovider
+   ```
+   Report passed, failed, skipped, xfail and xpass counts. Explain every skip; a wrong environment shows up as skips, not failures. Zero xfail means any bug found is either untested or locked in by a test.
+4. **Run CI's lint commands**, copied from `.github/workflows/ci.yml`, or the pre-commit hooks if the repo has those but no CI. Also run pylint once with warnings enabled, to spot dead code.
+5. **Build the call map.** This skill's `callmap.py` does it; run it from the PR repo root:
+   ```bash
+   python ${CLAUDE_SKILL_DIR}/callmap.py <src files...> --split <big_file>:<line>,<line> > {REVIEW_DIR}/callmap.txt
+   ```
+   It lists every function used across areas, with callers as `file:line(function)`, including tests.
+6. **Write the brief.** Copy `${CLAUDE_SKILL_DIR}/reviewer_brief.md` to `{REVIEW_DIR}/brief.md` and fill in every placeholder.
+   With no review venv, point `{PYTHON}` and `{HAIL_SRC}` at the user's existing Hail environment.
+
+## Phase 3: Reviewer agents
+
+- **Launch all reviewers in one message**, so they run in parallel. Use `subagent_type: general-purpose`, which has SendMessage.
+- **Set `model` on every Agent call to the model chosen for its part** (`opus`, `sonnet` or `fable`; see "Model choice"). Add each agent's model to `roster.md`.
+- **Each prompt contains:**
+  - the agent's role name, and "read `{REVIEW_DIR}/brief.md` and follow it exactly";
+  - its area, with exact line ranges;
+  - its callers and callees from the call map, with the owning area of each;
+  - a focus list written for that area.
+- **Focus lists should name concrete risks**, not generic ones:
+  - preprocessing: missing-value handling, freq/meta index alignment, chrX/chrY/PAR, filters;
+  - model application: coefficient order, which index each model uses, equivalence between alternative paths;
+  - metrics: CI parameterization, z-score sign, which transcripts are ranked;
+  - pipeline: every call's signature, step-to-step resource wiring, `--test`/`--overwrite` safety, changed defaults;
+  - resources: path collisions, test paths, stale checkpoints;
+  - docs: check against the code, not against other docs.
+- **Ask each agent to open the external functions it calls** (gnomad_methods at the right commit) rather than assume what they do.
+- **The Agent tool has no name parameter.** After launch, write `{REVIEW_DIR}/roster.md` with each area and its agent ID, then send every agent a message pointing to it, along with the test results once you have them.
+
+## Phase 4: Collect
+
+- As each report arrives, add a condensed entry to `{REVIEW_DIR}/ledger.md`: priority, file:line, one-line claim, confidence, and whether a repro is needed.
+- Merge duplicates. A finding reached independently by two agents is stronger; note that.
+- **Watch for duplicate or misrouted reports.** A message sent to a finished agent restarts it, and its report may go to the sender instead of you. Agents sometimes tell you about this; check the ledger instead of resending.
+- Run a second round only for cross-area questions that are still open, by messaging the owners. Most get settled agent to agent.
+
+## Phase 5: Check every High and Medium yourself
+
+Don't trust agent output by itself; mistakes come back sounding just as confident as real findings.
+
+- Re-read the code at every cited line. Confirm line numbers with `grep -n`, and confirm in-diff status from the `git diff -U0` hunks.
+- **Check each precondition in the real environment** (`which <tool>`, the installed packages, the files actually in the PR). A finding whose trigger isn't there is ranked by what happens when it is, not by the mechanism; downgrade it if the trigger can't occur on a normal run.
+- **Run repros one JVM at a time.** Batch several into one script so Hail starts once. Print `RESULT ...` lines and grep for them.
+- **Run repros with `PYTHONPATH={GNOMAD_METHODS_PATH}:{REPO_PATH}`**, replacing any existing value, so they import the gnomad_methods copy the reviewers read. Print `gnomad.__path__` first and check that it starts there.
+- For CI claims, read the logs with `gh run view <id> --log-failed` (read-only). Check that the run's branch has the same tests and config as the PR.
+- **For "this test can't catch X" claims, break the code on purpose.** Monkeypatch the function with the logic removed (`inspect.getsource` → edit → `exec`), and show that the test still passes.
+- Drop or downgrade anything that doesn't hold, or whose trigger can't happen on real data or a normal run. List each dropped finding in a few words under "Considered, not raised". Fix wrong line numbers.
+
+## Phase 6: Check every High finding end to end (always), and get second opinions
+
+Do steps 1–3 and 5 for each High finding before presenting results, and step 4 once for every finding in second-opinion scope, even with no High findings.
+
+1. **Look for reasons it's wrong.**
+   - Does other code (upstream, downstream, or in gnomad_methods) already handle it?
+   - What did the base branch do? Is this actually new? If releases were cut from the PR branch, also compare against the last release, not only `origin/<base>`.
+   - Does the draft comment overstate the problem?
+2. **Unless the user chose static review only, reproduce it through the real public functions, chained the way the pipeline chains them** (with Phase 5's `PYTHONPATH`), not only the helper where the bug lives.
+   - Reuse test fixtures by importing the test module (add `tests/...` to `sys.path`).
+   - Monkeypatch fixture constants to add the case you need.
+   - Checkpoint intermediate Tables to `{REVIEW_DIR}/repros/` so a failed later step doesn't redo everything.
+3. **Test CI and runtime claims with controlled comparisons**, e.g. the same suite at two heap sizes, or on two Hail versions.
+4. **Second opinion (only if the user asked for one).** For each finding in scope, start one fresh agent on a different model from its finder: the user's choice (Fable by default, or Sonnet) for Opus findings, Opus for the rest. Record the result in that finding's "Second opinion" bullet.
+   - Launch them all in one message, with `subagent_type: general-purpose`.
+   - **Give it the code, not the conclusion.** Include the repo path, the review commit SHA, the file:line and function, and a neutral question about behavior. Don't include the finding, the draft comment, or what you expect. For example:
+     > In `get_exomes_observed_and_possible` (`constraint.py:434-541`), what do `observed_variants` and `possible_variants` come out as for an exome variant that has a non-empty filter set and AF 0.2, with `max_af=0.001`? Compare that with an unfiltered variant at the same AF. Trace through any gnomad_methods functions it calls, and answer with file:line evidence.
+   - Point it to the "Hard rules" section of `{REVIEW_DIR}/brief.md`: read-only, no Hail, no GCS.
+   - **If it disagrees, re-check the code yourself.** Report the disagreement to the user rather than quietly choosing a side.
+5. **Update `REVIEW.md` under each High finding:**
+   - a "Verified end to end" bullet with the input and the output;
+   - a "Correction" bullet if the claim got narrower, along with a rewritten draft comment;
+   - a "Severity note" if it's a non-default path or depends on intent.
+6. **Say what you couldn't check**, e.g. how many real transcripts are affected, which would need GCS reads. Offer to do it, and ask first.
+
+## Phase 7: Write up
+
+- Write `{REVIEW_DIR}/REVIEW.md` using `${CLAUDE_SKILL_DIR}/review_template.md`, with sections High, Medium, Low (grouped by area), Nit, open questions for the author, considered-not-raised, and checked-and-fine.
+- Every finding gets a location, the function name, a short "what", and a draft comment.
+- Mark lines that aren't in the diff, and files the PR doesn't touch (those need a general comment).
+- Fill in the "Models" line in the header: the coordinator model, which reviewers ran on which model, and whether a second opinion was run.
+- **Chat summary:**
+  - one opening line with the counts and the file path;
+  - what was run, including the models used;
+  - the High findings with full draft comments;
+  - the Medium findings as a table (location, issue);
+  - the Low and Nit findings as counts plus the main themes;
+  - decisions that belong to the author;
+  - a cleanup note for the venv and any worktrees under `{REVIEW_DIR}` (worktrees need `git worktree remove`).
+- **If the user chose one finding at a time:** give the opening line, what was run, and the counts, then the first High finding with its full draft comment, and stop. Show the next finding, in ranked order, each time they ask; after the last Medium, offer the Low and Nit findings as a list. Close with the author's decisions and the cleanup note.
