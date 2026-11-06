@@ -1,6 +1,6 @@
 ---
-name: clean-git-history
-description: Use this when the user wants to clean up a messy branch, squash commits, or tidy history before opening a PR. Rewrites local history into clean atomic commits without losing any changes.
+name: gnomad-clean-git-history
+description: Use this when the user wants to clean up a messy branch, squash commits, or tidy history before opening a PR in a gnomAD repo. Rewrites local history into clean atomic commits without losing any changes.
 ---
 
 ## Objective
@@ -16,7 +16,7 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 **Do not run any diff or log commands spanning the branch until the base is confirmed.**
 
 1. Run `git log --oneline --graph --decorate -n 20` to see where the branch diverges.
-2. Find the base with the `find-base-branch` skill (`.claude/skills/find-base-branch/SKILL.md`), and have the user confirm it even if it is `main`: a rewrite on the wrong base is hard to spot afterwards.
+2. Find the base by calling the Skill tool with `gnomad-find-base-branch`, and have the user confirm it even if it is `main`: a rewrite on the wrong base is hard to spot afterwards.
 3. Record the fork point: `git merge-base <base> HEAD`. If it is not the tip of the base, the base has moved on since the branch was cut. Tell the user, and ask whether to rebase onto the base first or to clean up the history in place on top of the fork point. If they want to rebase, stop here and let them do it (it may need conflicts resolved), then start this skill again.
 
 ### 2. Understand the existing history (read-only, mutate nothing)
@@ -36,8 +36,8 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
        absorbed commits' `Co-authored-by:` trailers. GitHub adds those when a
        reviewer's suggestion is applied, and a rewrite would otherwise drop
        them. Keep only people: leave out AI co-author lines (e.g.
-       `Co-Authored-By: Claude ...`), since the rebuilt commit's `Assisted-by`
-       trailer covers those.
+       `Co-Authored-By: Claude ...`); the attribution the repo's `CLAUDE.md`
+       asks for covers those.
 
    Map every original commit into exactly one target commit.
 
@@ -49,10 +49,10 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 
 1. Create a backup: `git branch backup-$(git branch --show-current)-$(date +%Y-%m-%d--%H-%M)`. Tell the user the backup branch name.
 2. `git reset --soft <fork-point>` (the merge-base from step 1.3) then `git reset` to unstage everything. Never reset to the tip of the base: if the base has moved, the new commits would also undo every commit added to the base since the fork, and the check in step 4 would not catch it.
-3. For each planned commit, stage and commit the way the `commit` skill
-   (`.claude/skills/commit/SKILL.md`) says to: name the paths when staging
-   (its "Check staged changes" section) and end the message with its
-   `Assisted-by` trailer (its "Commit" section). Skip its
+3. For each planned commit, stage and commit the way the `gnomad-commit` skill
+   (load it by calling the Skill tool with `gnomad-commit`) says to: name the paths when staging
+   (its "Check staged changes" section) and end the message with the
+   attribution its "Commit" section describes. Skip its
    other steps, such as running hooks and confirming each commit: the plan is
    already approved, and a hook that reformats a file would make the check in
    step 4 fail.
@@ -65,12 +65,12 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing
    - `git commit --no-verify --author="<Name> <email>"` with the planned
      author and title, a `Co-authored-by:` line for each co-author the plan
-     lists for this commit, and the trailer. The
+     lists for this commit, and the attribution. The
      `--no-verify` matters: if the user installed the pre-commit git hook, it
      would reformat files during the commit and the result would no longer match
      the backup branch in step 4. This skill reorganizes the branch's content
      without changing it; formatting fixes belong in their own commit afterwards,
-     via the `commit` skill.
+     via the `gnomad-commit` skill.
 
 ### 4. Verify
 
@@ -80,4 +80,4 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 
 ### 5. Handoff
 
-Do NOT push. Tell the user to run `git push --force-with-lease` themselves once they are satisfied. Offer to draft a PR description using the draft-pull-request-description skill.
+Do NOT push. Tell the user to run `git push --force-with-lease` themselves once they are satisfied. Offer to draft a PR description by calling the Skill tool with `gnomad-pr-description`.
