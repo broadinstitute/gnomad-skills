@@ -13,8 +13,8 @@ here is published or packaged; `git pull` is the update mechanism.
 - Skill names carry the `gnomad-` prefix; the frontmatter `name` matches the
   directory name.
 - A skill refers to another skill by telling Claude to call the Skill tool
-  with its name (`calling the Skill tool with \`gnomad-find-base-branch\``), not
-  by a file path. It refers to its own helper files as
+  with its name, for example "call the Skill tool with `gnomad-find-base-branch`",
+  not by a file path. It refers to its own helper files as
   `${CLAUDE_SKILL_DIR}/<file>`.
 - A skill must work in every gnomAD repo. Anything repo-specific (a `tests/`
   directory, `.github/release.yml`, a public API, a `CLAUDE.md` section) is

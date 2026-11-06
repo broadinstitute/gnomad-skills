@@ -21,7 +21,7 @@ for link in "$dest"/*; do
     [ -L "$link" ] || continue
     target=$(readlink "$link")
     case "$target" in
-        "$repo"/skills/*) [ -e "$target" ] || { rm "$link"; echo "removed stale $(basename "$link")"; } ;;
+        "$repo"/skills/*) [ -e "$target/SKILL.md" ] || { rm "$link"; echo "removed stale $(basename "$link")"; } ;;
     esac
 done
 
