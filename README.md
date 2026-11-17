@@ -62,6 +62,10 @@ repo's settings need only one entry to turn it on.
 - **Dataproc:** asks before every cluster start, saying when it has 100+
   workers or no `--max-idle` or `--max-age`; before a resize to 100+ workers;
   and before stopping or deleting a cluster or cancelling a job.
+- **Secrets and permissions:** blocks Read, Edit or Write on `.env` files,
+  IAM changes and bucket retention locks. Asks before printing access tokens
+  or reading credential files, and before bucket-owner settings (lifecycle
+  rules, versioning, ACLs, encryption keys, signed URLs).
 
 It matches the command text, so it also catches spellings that permission
 rules miss, such as `git push origin main --force` or

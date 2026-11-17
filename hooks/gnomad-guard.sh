@@ -59,6 +59,18 @@ tool=$(field .tool_name) || exit 1
 path=$(field .tool_input.file_path) || exit 1
 cmd=$(field .tool_input.command) || exit 1
 
+# ---------------------------------------------------------------------------
+# Secrets: Read, Edit and Write on .env files
+# ---------------------------------------------------------------------------
+# A .env file can hold API keys and passwords, and anything Claude reads goes
+# into the transcript. So reading, editing or overwriting .env, .env.local or
+# build.env is blocked; ask the user for the value you need instead.
+case ${path##*/} in
+    .env | .env.* | *.env)
+        echo "Blocked by gnomad-guard: $tool on $path, a .env file, which can hold secrets. Ask the user for what you need from it." >&2
+        exit 2
+        ;;
+esac
 
 # Everything below is about Bash commands; any other call passes.
 [ -n "$cmd" ] || exit 0
@@ -118,6 +130,9 @@ gsutil_billing() {
     } END { exit !found }'
 }
 
+# `gcloud storage buckets update`, which changes a bucket's settings.
+bucket_update() { tok 'gcloud' && tok 'storage' && tok 'buckets' && tok 'update'; }
+
 # ---------------------------------------------------------------------------
 # Checks on the whole command
 # ---------------------------------------------------------------------------
@@ -147,6 +162,12 @@ fi
 # and hailctl's --requester-pays-allow-all.
 if printf '%s' "$raw" | grep -Eq "gcs_requester_pays_configuration[[:space:]]*=[[:space:]]*['\"]|fs\.gs\.requester\.pays\.mode=ENABLED|--requester-pays-allow-all"; then
     add_block "$bill_all"
+fi
+
+# Cloud credential files: printing one puts a live credential in the
+# transcript.
+if printf '%s' "$raw" | grep -Eq 'application_default_credentials\.json|legacy_credentials|credentials\.db|access_tokens\.db|\.boto([[:space:]]|$)'; then
+    add_ask "reads cloud credential files"
 fi
 
 # ---------------------------------------------------------------------------
@@ -407,6 +428,82 @@ for seg in $segs; do
         elif [ -n "$cost" ]; then
             add_ask "resizes Dataproc cluster ${name:-?}: $cost"
         fi
+    fi
+
+    # -----------------------------------------------------------------------
+    # Secrets and permissions
+    # -----------------------------------------------------------------------
+    # IAM decides who can read, write or delete our data, so changing it is
+    # blocked: gcloud ... add-iam-policy-binding, remove-iam-policy-binding or
+    # set-iam-policy (projects, buckets), gcloud iam create, delete, update or
+    # enable (roles, service accounts, keys), gsutil iam ch or set. Reading a
+    # policy (get-iam-policy, gsutil iam get) passes.
+    if { tok 'gcloud' && tok 'add-iam-policy-binding|remove-iam-policy-binding|set-iam-policy'; } \
+        || { tok 'gcloud' && tok 'iam' && tok 'create|delete|update|undelete|enable|disable'; } \
+        || { tok 'gsutil' && tok 'iam' && tok 'set|ch'; }; then
+        add_block "changes IAM permissions, which decide who can read, write or delete our data. Ask the user to run it"
+    fi
+
+    # A command that touches a .env file (cat .env, source .env.local) can
+    # print secrets into the transcript.
+    if has '[[:space:]/]\.env(\.[^[:space:]/]+)?[[:space:]]|[^[:space:]/]\.env[[:space:]]'; then
+        add_ask "reads or changes a .env file, which can hold secrets"
+    fi
+
+    # gcloud auth print-access-token (or print-identity-token) puts a live
+    # credential in the transcript.
+    if tok 'gcloud' && has 'print-(access|identity)-token'; then
+        add_ask "prints a live access token into the transcript"
+    fi
+
+    # -----------------------------------------------------------------------
+    # Bucket-owner settings
+    # -----------------------------------------------------------------------
+    # Settings only a bucket's owner can change, any of which can lose or
+    # expose data. A retention lock can never be undone, so it blocks; the
+    # rest ask, saying what the change can cost.
+    b=$(printf '%s' "$s" | grep -Eo 'gs://[^[:space:]/]+' | head -n 1)
+    if { tok 'gsutil' && tok 'retention' && tok 'lock'; } \
+        || { bucket_update && has '[[:space:]]--lock-retention-period([[:space:]=])'; }; then
+        add_block "locks the retention policy on ${b:-a bucket}, which can't be undone: no object can be deleted before it expires, and the bucket can't be deleted. Ask the user to run it"
+    fi
+    if { tok 'gsutil' && tok 'lifecycle' && tok 'set'; } \
+        || { bucket_update && has '[[:space:]]--lifecycle-file([[:space:]=])'; }; then
+        add_ask "sets lifecycle rules on ${b:-a bucket}, which can delete objects in the background"
+    fi
+    if { tok 'gsutil' && tok 'versioning' && tok 'set' && tok 'off|suspended'; } \
+        || { bucket_update && has '[[:space:]](--no-versioning|--clear-soft-delete|--soft-delete-duration)([[:space:]=])'; }; then
+        add_ask "turns off versioning or changes soft delete on ${b:-a bucket}, the only way back for deleted objects"
+    fi
+    if { tok 'gsutil' && tok 'requesterpays' && tok 'set'; } \
+        || { bucket_update && has '[[:space:]]--(no-)?requester-pays([[:space:]=])'; }; then
+        add_ask "changes requester-pays on ${b:-a bucket}: off means we pay for everyone's downloads, on breaks free readers"
+    fi
+    # ACLs and public access, said more strongly when the change would make
+    # data public (allUsers, public-read, no public-access prevention).
+    if { tok 'gsutil' && tok 'acl|defacl' && tok 'set|ch'; } \
+        || { tok 'gcloud' && tok 'storage' && has '[[:space:]](--predefined-acl|--predefined-default-object-acl|--add-acl-grant|--acl-file|--default-object-acl-file)([[:space:]=])'; } \
+        || { bucket_update && has '[[:space:]](--no-public-access-prevention|--no-uniform-bucket-level-access)([[:space:]=])'; }; then
+        if has '[Aa]ll[Uu]sers|[Aa]ll[Aa]uthenticated[Uu]sers|public-?[Rr]ead|--no-public-access-prevention'; then
+            add_ask "can make ${b:-objects} readable by anyone; internal gnomAD data must never be public"
+        else
+            add_ask "changes who can access ${b:-a bucket}"
+        fi
+    fi
+    if { tok 'gsutil' && tok 'kms' && tok 'encryption' && has '[[:space:]]-[kd][[:space:]]'; } \
+        || { bucket_update && has '[[:space:]](--default-encryption-key|--clear-default-encryption-key)([[:space:]=])'; } \
+        || { tok 'gcloud' && tok 'kms' && tok 'versions' && tok 'disable|destroy'; }; then
+        add_ask "changes or disables an encryption key; data under a lost key can never be read"
+    fi
+    # A signed URL lets anyone with the link read the object until it expires.
+    if { tok 'gsutil' && tok 'signurl'; } || { tok 'gcloud' && tok 'storage' && tok 'sign-url'; }; then
+        dur=$(printf '%s' "$s" | awk '{
+            for (i = 1; i < NF; i++) {
+                if ($i == "-d" || $i == "--duration") { print $(i + 1); exit }
+                if ($i ~ /^--duration=/) { sub(/^--duration=/, "", $i); print $i; exit }
+            }
+        }')
+        add_ask "creates a signed URL${dur:+ valid for $dur}; anyone with the link can read ${p:-the object} until it expires"
     fi
     IFS=$nl
 done

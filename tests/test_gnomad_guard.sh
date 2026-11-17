@@ -146,6 +146,46 @@ check ask 'hailctl dataproc stop my-cluster'
 check ask 'cd ~/gnomad_qc && hailctl dataproc stop my-cluster'
 check ask 'gcloud dataproc jobs kill abc123 --region us-central1' 'cancels a Dataproc job'
 
+echo "== secrets: .env files, credentials and access tokens"
+check_file block Read .env
+check_file block Read config/.env.local
+check_file block Edit build.env
+check_file block Write .env
+check_file pass Read config/settings.json
+check ask 'cat .env' '.env file'
+check ask 'grep API_KEY .env.local'
+check pass 'source .venv/bin/activate'
+check ask 'cat ~/.config/gcloud/application_default_credentials.json' 'credential files'
+check ask 'gcloud auth print-access-token' 'access token'
+
+echo "== permissions: IAM changes block; reading a policy passes"
+check pass 'gsutil iam get gs://my-bucket'
+check pass 'gcloud iam service-accounts list'
+check pass 'gcloud projects get-iam-policy my-project'
+check block 'gsutil -m iam ch allUsers:objectViewer gs://my-bucket'
+check block 'gcloud projects add-iam-policy-binding my-project --member user:someone@example.org --role roles/owner'
+check block 'gcloud storage buckets add-iam-policy-binding gs://my-bucket --member allUsers --role roles/storage.objectViewer'
+check block 'gcloud iam service-accounts keys create key.json --iam-account my-sa@my-project.iam.gserviceaccount.com'
+
+echo "== bucket-owner settings"
+check pass 'gsutil versioning get gs://my-bucket'
+check pass 'gsutil lifecycle get gs://my-bucket'
+check pass 'gsutil retention get gs://my-bucket'
+check block 'gsutil retention lock gs://my-bucket'
+check block 'gcloud storage buckets update gs://my-bucket --lock-retention-period'
+check ask 'gsutil lifecycle set lifecycle.json gs://my-bucket' 'lifecycle rules'
+check ask 'gcloud storage buckets update gs://my-bucket --lifecycle-file=rules.json'
+check ask 'gsutil versioning set off gs://my-bucket'
+check ask 'gcloud storage buckets update gs://my-bucket --clear-soft-delete'
+check ask 'gsutil requesterpays set off gs://gnomad-public-requester-pays'
+check ask 'gsutil -m acl ch -r -u AllUsers:R gs://my-bucket/out/' 'readable by anyone'
+check ask 'gsutil defacl set public-read gs://my-bucket'
+check ask 'gcloud storage buckets update gs://my-bucket --no-public-access-prevention'
+check ask 'gcloud storage buckets update gs://my-bucket --clear-default-encryption-key'
+check ask 'gcloud kms keys versions destroy 1 --key k --keyring r --location us'
+check ask 'gsutil signurl -d 7d key.json gs://my-bucket/x.vcf.gz' 'valid for 7d'
+check ask 'gcloud storage sign-url gs://my-bucket/x.vcf.gz --duration=7d --private-key-file=key.json'
+
 echo "== bad input"
 total=$((total + 1))
 printf 'not json' | sh "$guard" 2>/dev/null; code=$?
