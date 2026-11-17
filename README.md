@@ -76,6 +76,68 @@ echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main --force"
 sh tests/test_gnomad_guard.sh
 ```
 
+### Turn on gnomad-guard in a repo
+
+`scripts/link-skills.sh` links the hook to `~/.claude/hooks/gnomad-guard.sh`,
+but a linked hook does nothing until a repo's `.claude/settings.json`
+registers it. Add the hook, and the permission rules that go with it:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(gcloud iam *)",
+      "Bash(gsutil iam *)",
+      "Bash(gcloud projects add-iam-policy-binding *)",
+      "Bash(gcloud storage buckets add-iam-policy-binding *)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(*.env)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(gsutil rm *)",
+      "Bash(gsutil -m rm *)",
+      "Bash(gcloud storage rm *)",
+      "Bash(gcloud dataproc clusters delete *)",
+      "Bash(gcloud dataproc clusters stop *)",
+      "Bash(hailctl dataproc stop *)",
+      "Bash(hailctl dataproc start *)",
+      "Bash(gcloud dataproc clusters create *)",
+      "Bash(gh pr merge *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME\"/.claude/hooks/gnomad-guard.sh",
+            "timeout": 10,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+- The rules catch the usual spelling of a command; the hook catches the rest
+  and gives a reason. Lists merge with each person's own settings, and a deny
+  anywhere wins.
+- The repo also needs the SessionStart hook that installs gnomad-skills, as in
+  gnomad-constraint's `.claude/hooks/update-gnomad-skills.sh`, so the link
+  exists before the first command.
+- `onFailure: block` (Claude Code 2.1.295 or later) blocks a command when the
+  hook is missing or fails, instead of letting it through unchecked.
+- To try it for one session without changing a repo, put the `hooks` part in a
+  file and run `claude --settings <file>`.
+
 ## Install
 
 ```bash
@@ -83,9 +145,11 @@ git clone https://github.com/broadinstitute/gnomad-skills.git ~/repos/gnomad-ski
 ~/repos/gnomad-skills/scripts/link-skills.sh
 ```
 
-The script symlinks each `skills/<name>` into `~/.claude/skills/<name>`. It
-only replaces symlinks it made, so a skill you installed by hand (for example
-a clone of `/review`, or a link to your own copy) is left alone and reported.
+The script symlinks each `skills/<name>` into `~/.claude/skills/<name>`, and
+each `hooks/gnomad-*.sh` into `~/.claude/hooks/` (a linked hook stays off until
+a repo [turns it on](#turn-on-gnomad-guard-in-a-repo)). It only replaces
+symlinks it made, so a skill or hook you installed by hand (for example a
+clone of `/review`, or a link to your own copy) is left alone and reported.
 Claude Code notices the new
 skills in a running session; if `~/.claude/skills` did not exist before, run
 `/reload-skills` once.
@@ -97,7 +161,8 @@ git -C ~/repos/gnomad-skills pull
 ```
 
 The symlinks point into the checkout, so that is all. Re-run
-`scripts/link-skills.sh` only after a skill is added, renamed or removed.
+`scripts/link-skills.sh` only after a skill or hook is added, renamed or
+removed.
 
 ## Adding or changing a skill
 
