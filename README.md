@@ -59,6 +59,9 @@ repo's settings need only one entry to turn it on.
   to a gnomAD release path, `--overwrite` without `--test`, and reading the
   requester-pays bucket. Blocks a billing project on a bucket that isn't
   requester-pays, and settings that bill every bucket.
+- **Dataproc:** asks before every cluster start, saying when it has 100+
+  workers or no `--max-idle` or `--max-age`; before a resize to 100+ workers;
+  and before stopping or deleting a cluster or cancelling a job.
 
 It matches the command text, so it also catches spellings that permission
 rules miss, such as `git push origin main --force` or
@@ -69,6 +72,7 @@ Settings, as environment variables:
 
 - `GNOMAD_SKIP_GUARD=1` turns it off.
 - `GNOMAD_GUARD_RP_BUCKETS` names more requester-pays buckets, as `a|b`.
+- `GNOMAD_GUARD_MAX_WORKERS` is the cluster size that asks first (default 100).
 
 Try it, and run its test cases:
 

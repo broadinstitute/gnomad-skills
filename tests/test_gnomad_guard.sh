@@ -129,7 +129,22 @@ check block "python -c \"import hail as hl; hl.init(gcs_requester_pays_configura
 check block 'gcloud dataproc clusters create my-cluster --max-idle 30m --properties core:fs.gs.requester.pays.mode=ENABLED'
 check pass "python -c \"import hail as hl; hl.init(gcs_requester_pays_configuration=('my-project', ['gnomad-public-requester-pays']))\""
 check ask 'hailctl dataproc start my-cluster --requester-pays-allow-buckets gnomad-public-requester-pays,other-lab-bucket --max-idle 30m' 'other-lab-bucket'
-check pass 'hailctl dataproc start my-cluster --requester-pays-allow-buckets gnomad-public-requester-pays --max-idle 30m'
+check ask 'hailctl dataproc start my-cluster --requester-pays-allow-buckets gnomad-public-requester-pays --max-idle 30m' 'gnomad-guard: this command starts Dataproc cluster my-cluster, which bills while it runs.'
+
+echo "== Dataproc: every start asks, saying what makes it expensive"
+check ask 'hailctl dataproc start my-cluster --num-secondary-workers 20 --max-idle 540m' 'starts Dataproc cluster my-cluster, which bills while it runs'
+check ask 'hailctl dataproc start my-cluster --num-secondary-workers 20 --max-age 12h' 'starts Dataproc cluster my-cluster, which bills while it runs'
+check ask 'hailctl dataproc start big --num-secondary-workers 400' '400 workers; no --max-idle or --max-age'
+check ask 'gcloud dataproc clusters create my-cluster --region us-central1' 'no --max-idle or --max-age'
+
+echo "== Dataproc: resizes, stops and cancels"
+check pass 'hailctl dataproc modify my-cluster --num-secondary-workers 50'
+check ask 'hailctl dataproc modify my-cluster --num-secondary-workers 200' 'resizes Dataproc cluster my-cluster: 200 workers'
+check ask 'gcloud dataproc clusters update my-cluster --num-secondary-workers=150 --region us-central1' '150 workers'
+check ask 'gcloud dataproc clusters delete my-cluster --region us-central1' 'someone else'
+check ask 'hailctl dataproc stop my-cluster'
+check ask 'cd ~/gnomad_qc && hailctl dataproc stop my-cluster'
+check ask 'gcloud dataproc jobs kill abc123 --region us-central1' 'cancels a Dataproc job'
 
 echo "== bad input"
 total=$((total + 1))
