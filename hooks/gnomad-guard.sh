@@ -28,8 +28,10 @@
 # Settings (environment variables):
 #   GNOMAD_SKIP_GUARD=1        turn the hook off.
 #   GNOMAD_GUARD_RP_BUCKETS    more requester-pays buckets, as a regex: a|b.
+#   GNOMAD_GUARD_MAX_WORKERS   cluster size that asks first (default 100).
 
 [ -n "$GNOMAD_SKIP_GUARD" ] && exit 0
+max_workers=${GNOMAD_GUARD_MAX_WORKERS:-100}
 
 # ---------------------------------------------------------------------------
 # Read the tool call
@@ -346,6 +348,65 @@ for seg in $segs; do
             }
         }')
         [ -n "$other" ] && add_ask "bills a project for buckets gnomad-guard doesn't know are requester-pays ($other); on any other bucket that only costs us"
+    fi
+
+    # -----------------------------------------------------------------------
+    # Dataproc clusters and jobs
+    # -----------------------------------------------------------------------
+    # We share clusters, so stopping or deleting one can kill someone else's
+    # job: hailctl dataproc stop, gcloud dataproc clusters stop or delete,
+    # deployctl dataproc-cluster stop. Cancelling a job or a Hail Batch asks
+    # too.
+    if { tok 'gcloud' && tok 'dataproc' && tok 'clusters' && tok 'delete|stop'; } \
+        || { tok 'hailctl' && tok 'dataproc' && tok 'stop'; } \
+        || { tok 'deployctl' && tok 'dataproc-cluster' && tok 'stop'; }; then
+        name=$(printf '%s' "$s" | awk '{ for (i = 1; i < NF; i++) if ($i == "stop" || $i == "delete") { print $(i + 1); exit } }')
+        add_ask "stops or deletes Dataproc cluster ${name:-?}; someone else's job may be running on it"
+    fi
+    if tok 'gcloud' && tok 'dataproc' && tok 'jobs' && tok 'kill|delete'; then
+        add_ask "cancels a Dataproc job"
+    fi
+    if tok 'hailctl' && tok 'batch' && tok 'cancel|delete'; then
+        add_ask "cancels a Hail Batch"
+    fi
+
+    # A cluster bills from the moment it starts, so every start asks
+    # (hailctl dataproc start, gcloud dataproc clusters create). The reason
+    # names what makes this one expensive: $max_workers or more workers in all,
+    # non-preemptible secondary workers, or neither --max-idle nor --max-age to
+    # stop it on its own. A resize (hailctl dataproc modify, gcloud dataproc
+    # clusters update) asks only for those first two. An autoscaling policy's
+    # maximum lives in the policy, so it isn't seen here.
+    starting=""
+    resizing=""
+    { tok 'hailctl' && tok 'dataproc' && tok 'start'; } \
+        || { tok 'gcloud' && tok 'dataproc' && tok 'clusters' && tok 'create'; } && starting=1
+    { tok 'hailctl' && tok 'dataproc' && tok 'modify'; } \
+        || { tok 'gcloud' && tok 'dataproc' && tok 'clusters' && tok 'update'; } && resizing=1
+    if [ -n "$starting$resizing" ]; then
+        name=$(printf '%s' "$s" | awk '{ for (i = 1; i < NF; i++) if ($i ~ /^(start|create|modify|update)$/) { print $(i + 1); exit } }')
+        # Sum --num-workers, --num-secondary-workers and
+        # --num-preemptible-workers, written as --flag N or --flag=N.
+        workers=$(printf '%s' "$s" | awk '{
+            for (i = 1; i <= NF; i++) {
+                n = split($i, kv, "=")
+                if (kv[1] ~ /^--num-(secondary-|preemptible-)?workers$/) t += (n > 1 ? kv[2] : $(i + 1))
+            }
+            print t + 0 }')
+        cost=""
+        [ "$workers" -ge "$max_workers" ] && cost="$workers workers"
+        has 'non-preemptible' && cost="${cost:+$cost; }non-preemptible secondary workers"
+        if [ -n "$starting" ]; then
+            has '[[:space:]]--max-(idle|age)([[:space:]=])' \
+                || cost="${cost:+$cost; }no --max-idle or --max-age, so it bills until someone stops it"
+            if [ -n "$cost" ]; then
+                add_ask "starts Dataproc cluster ${name:-?}: $cost"
+            else
+                add_ask "starts Dataproc cluster ${name:-?}, which bills while it runs"
+            fi
+        elif [ -n "$cost" ]; then
+            add_ask "resizes Dataproc cluster ${name:-?}: $cost"
+        fi
     fi
     IFS=$nl
 done
