@@ -2,9 +2,9 @@
 
 Shared Claude Code skills for the gnomAD repos, installed as personal skills by symlinking
 `skills/<name>` into `~/.claude/skills` (`scripts/link-skills.sh`), and a
-shared PreToolUse hook, `hooks/gnomad-guard.sh`, that a repo turns on in its
-own settings. Nothing here is published or packaged; `git pull` is the update
-mechanism.
+shared PreToolUse hook, `hooks/gnomad-guard.sh`, which the same script links
+into `~/.claude/hooks` and a repo turns on in its own settings. Nothing here is
+published or packaged; `git pull` is the update mechanism.
 
 ## Rules for editing
 
