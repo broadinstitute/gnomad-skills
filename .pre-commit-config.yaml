@@ -11,3 +11,11 @@ repos:
     hooks:
       - id: black
         language_version: python3
+  - repo: local
+    hooks:
+      - id: test-gnomad-guard
+        name: gnomad-guard test cases
+        entry: sh tests/test_gnomad_guard.sh
+        language: system
+        files: ^(hooks|tests)/
+        pass_filenames: false
