@@ -51,6 +51,10 @@ repo's settings need only one entry to turn it on.
 - **Git:** blocks a plain force-push (`--force`, `-f`, `+branch`) and any
   force-push to `main`. Asks before every other push, including
   `--force-with-lease` on your own branch, and before `gh pr merge`.
+- **Local work:** asks before deletes that Claude's rewind can't bring back:
+  `rm -r` or a wildcard `rm` outside scratch folders, `find -delete`,
+  `git reset --hard`, `git clean -f`, `git checkout --`, `git restore`,
+  `git stash drop` and `git branch -D`.
 
 It matches the command text, so it also catches spellings that permission
 rules miss, such as `git push origin main --force` or
