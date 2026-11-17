@@ -55,6 +55,10 @@ repo's settings need only one entry to turn it on.
   `rm -r` or a wildcard `rm` outside scratch folders, `find -delete`,
   `git reset --hard`, `git clean -f`, `git checkout --`, `git restore`,
   `git stash drop` and `git branch -D`.
+- **GCS:** asks before deleting data (`gsutil rm`, `rsync -d`, ...), writing
+  to a gnomAD release path, `--overwrite` without `--test`, and reading the
+  requester-pays bucket. Blocks a billing project on a bucket that isn't
+  requester-pays, and settings that bill every bucket.
 
 It matches the command text, so it also catches spellings that permission
 rules miss, such as `git push origin main --force` or
@@ -64,6 +68,7 @@ deletes data by itself isn't seen.
 Settings, as environment variables:
 
 - `GNOMAD_SKIP_GUARD=1` turns it off.
+- `GNOMAD_GUARD_RP_BUCKETS` names more requester-pays buckets, as `a|b`.
 
 Try it, and run its test cases:
 

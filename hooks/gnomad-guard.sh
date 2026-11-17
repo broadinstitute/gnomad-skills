@@ -27,6 +27,7 @@
 #
 # Settings (environment variables):
 #   GNOMAD_SKIP_GUARD=1        turn the hook off.
+#   GNOMAD_GUARD_RP_BUCKETS    more requester-pays buckets, as a regex: a|b.
 
 [ -n "$GNOMAD_SKIP_GUARD" ] && exit 0
 
@@ -86,6 +87,66 @@ gitcmd() { has "[[:space:]/]git([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--?[
 # Added to the reason for a local delete.
 lost="; Claude Code's rewind can't bring back what shell commands delete"
 
+# The first gs:// path in a string, to name it in the reason.
+gs_path() {
+    printf '%s' "$1" | grep -Eo "gs://[^[:space:]\"'(),]+" | head -n 1
+}
+
+# Where gnomAD releases live, in all three buckets.
+release='gs://(gnomad|gnomad-public-requester-pays|gcp-public-data--gnomad)/release'
+
+# Requester-pays buckets bill the reader, so reading one needs a billing
+# project. Passing a billing project for any other bucket bills us for requests
+# we would not otherwise pay for.
+rp_names="gnomad-public-requester-pays${GNOMAD_GUARD_RP_BUCKETS:+|$GNOMAD_GUARD_RP_BUCKETS}"
+rp_bucket="gs://($rp_names)"
+bill_other="passes a billing project for a bucket that isn't requester-pays, which bills our project for requests we would not otherwise pay for. Drop -u / --billing-project"
+bill_all="bills a project for every bucket, not just requester-pays ones, so ordinary reads and writes start costing us. Name the requester-pays buckets instead"
+
+# gsutil's own -u (its billing project) comes before the subcommand. A later
+# -u, as in `gsutil acl ch -u user:R`, belongs to the subcommand.
+gsutil_billing() {
+    printf '%s' "$s" | awk '{
+        for (i = 1; i <= NF; i++) if ($i ~ /(^|\/)gsutil$/) break
+        for (i++; i <= NF; i++) {
+            if ($i == "-u") { found = 1; exit }
+            if ($i == "-o" || $i == "-h") { i++; continue }
+            if ($i !~ /^-/) exit
+        }
+    } END { exit !found }'
+}
+
+# ---------------------------------------------------------------------------
+# Checks on the whole command
+# ---------------------------------------------------------------------------
+# A few rules look at the command as typed, before it's split, because they
+# need the quotes and parentheses: Python one-liners and file names.
+raw=$(printf '%s' "$cmd" | tr '\n\t' '  ')
+
+# GCS from Python: deleting (hl.hadoop_rm, fs.rmtree, blob.delete) or writing
+# to a release path (ht.write, checkpoint, export_vcf), and reading the
+# requester-pays bucket.
+if printf '%s' "$raw" | grep -Eq 'gs://' \
+    && printf '%s' "$raw" | grep -Eq 'rmtree\(|\.rm\(|hadoop_rm|delete_blob|\.remove\('; then
+    add_ask "deletes GCS data from Python ($(gs_path "$raw"))"
+fi
+if printf '%s' "$raw" | grep -Eq "$release" \
+    && printf '%s' "$raw" | grep -Eq 'overwrite[[:space:]]*=[[:space:]]*True|\.write\(|\.checkpoint\(|export_vcf\(|write_expression\('; then
+    add_ask "writes to a gnomAD release path from Python ($(gs_path "$raw"))"
+fi
+if printf '%s' "$raw" | grep -Eq "$rp_bucket" \
+    && printf '%s' "$raw" | grep -Eq 'read_table\(|read_matrix_table\(|read_vds\(|import_vcf\('; then
+    add_ask "reads the requester-pays bucket, which bills your project; read gs://gcp-public-data--gnomad instead"
+fi
+
+# Settings that bill a project for every bucket: Hail's
+# gcs_requester_pays_configuration given a project alone (a tuple with a bucket
+# list is fine), the GCS connector's ENABLED mode (AUTO and CUSTOM are fine),
+# and hailctl's --requester-pays-allow-all.
+if printf '%s' "$raw" | grep -Eq "gcs_requester_pays_configuration[[:space:]]*=[[:space:]]*['\"]|fs\.gs\.requester\.pays\.mode=ENABLED|--requester-pays-allow-all"; then
+    add_block "$bill_all"
+fi
+
 # ---------------------------------------------------------------------------
 # Split the command and check each part
 # ---------------------------------------------------------------------------
@@ -105,6 +166,9 @@ set -f
 for seg in $segs; do
     IFS=$old_ifs
     s=" $seg "
+    p=$(gs_path "$s")
+    what="GCS data"
+    has "$release" && what="gnomAD release data"
 
     # -----------------------------------------------------------------------
     # Git: pushes and merges
@@ -215,6 +279,73 @@ for seg in $segs; do
     fi
     if gitcmd 'branch' && has '[[:space:]](-D|--delete[[:space:]]+--force|-df|-fd)[[:space:]]'; then
         add_ask "force-deletes a local branch, even with commits that aren't merged anywhere"
+    fi
+
+    # -----------------------------------------------------------------------
+    # GCS: deletes, release paths and overwrites
+    # -----------------------------------------------------------------------
+    # Deleting GCS data can't be undone: gsutil rm or rb, gcloud storage rm,
+    # hadoop fs -rm, rsync with -d (which deletes whatever the source lacks),
+    # and rm -r on a bucket mounted with gcsfuse.
+    if { tok 'gsutil' && tok 'rm|rb'; } || { tok 'gcloud' && tok 'storage' && tok 'rm|delete'; } \
+        || { tok 'hadoop|hdfs' && tok '-rm|-rmr|-rmdir'; }; then
+        add_ask "deletes $what ($p)"
+    fi
+    if { tok 'gsutil' && tok 'rsync' && has '[[:space:]]-[[:alnum:]]*d[[:alnum:]]*[[:space:]]'; } \
+        || { tok 'gcloud' && tok 'storage' && tok 'rsync' && has '--delete-unmatched-destination-objects'; }; then
+        add_ask "syncs with delete, removing $what missing from the source ($p)"
+    fi
+    if tok 'rm' && has '[[:space:]](-[[:alnum:]]*[rR][[:alnum:]]*|--recursive)[[:space:]]' \
+        && has '[[:space:]]([^[:space:]]*/)?(gcs|gcsfuse|gcs-fuse)(/[^[:space:]]*)?[[:space:]]'; then
+        add_ask "runs a recursive rm on a mounted bucket"
+    fi
+
+    # Writing to a gnomAD release path with gsutil or gcloud: a cp or rsync
+    # whose destination (the last word) is a release path, or mv, setmeta,
+    # rewrite, compose or acl on one. Reading from a release path passes.
+    if has "$release" && tok 'gsutil|gcloud'; then
+        last=$(printf '%s' "$s" | awk '{ print $NF }')
+        if tok 'mv|setmeta|rewrite|compose|acl|iam' \
+            || { tok 'cp|rsync' && printf '%s' "$last" | grep -Eq "$release"; }; then
+            add_ask "writes to a gnomAD release path ($p)"
+        fi
+    fi
+
+    # In our pipeline scripts, --overwrite without --test replaces production
+    # Tables; with --test it writes to a temp bucket.
+    if tok '--overwrite' && ! has '[[:space:]]--(test|use-test-dataset|test-[[:alnum:]-]+)([[:space:]=])'; then
+        add_ask "passes --overwrite with no --test, which can replace production Tables"
+    fi
+
+    # -----------------------------------------------------------------------
+    # GCS: requester-pays and billing projects
+    # -----------------------------------------------------------------------
+    # A billing project (gsutil -u, --billing-project) is only for
+    # requester-pays buckets. With one named, it's how you read it: ask, and
+    # point to the free mirror. With none named, it only costs us: block.
+    # Copying from the requester-pays bucket without one asks too.
+    if gsutil_billing || has '[[:space:]]--billing-project([[:space:]=])'; then
+        if has "$rp_bucket"; then
+            add_ask "reads the requester-pays bucket, which bills your project; read gs://gcp-public-data--gnomad instead"
+        else
+            add_block "$bill_other"
+        fi
+    elif has "$rp_bucket" && tok 'cp|rsync|cat|du'; then
+        add_ask "reads the requester-pays bucket, which bills your project; read gs://gcp-public-data--gnomad instead"
+    fi
+    # hailctl --requester-pays-allow-buckets names the buckets to bill for:
+    # fine for requester-pays buckets, ask for any other.
+    if has '[[:space:]]--requester-pays-allow-buckets([[:space:]=])'; then
+        other=$(printf '%s' "$s" | awk -v rp="^($rp_names)$" '{
+            for (i = 1; i <= NF; i++) {
+                v = ""
+                if ($i == "--requester-pays-allow-buckets") v = $(i + 1)
+                else if ($i ~ /^--requester-pays-allow-buckets=/) v = substr($i, 32)
+                n = split(v, b, ",")
+                for (j = 1; j <= n; j++) if (b[j] !~ rp) { printf "%s%s", sep, b[j]; sep = ", " }
+            }
+        }')
+        [ -n "$other" ] && add_ask "bills a project for buckets gnomad-guard doesn't know are requester-pays ($other); on any other bucket that only costs us"
     fi
     IFS=$nl
 done
