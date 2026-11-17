@@ -83,6 +83,9 @@ has() { printf '%s' "$s" | grep -Eq -- "$1"; }
 tok() { has "[[:space:]/]($1)[[:space:]]"; }
 gitcmd() { has "[[:space:]/]git([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--?[[:alnum:]][[:alnum:]-]*(=[^[:space:]]*)?))*[[:space:]]+($1)[[:space:]]"; }
 
+# Added to the reason for a local delete.
+lost="; Claude Code's rewind can't bring back what shell commands delete"
+
 # ---------------------------------------------------------------------------
 # Split the command and check each part
 # ---------------------------------------------------------------------------
@@ -162,6 +165,56 @@ for seg in $segs; do
     # Merging a pull request is the step a reviewer should take.
     if tok 'gh' && tok 'pr' && tok 'merge'; then
         add_ask "merges a pull request"
+    fi
+
+    # -----------------------------------------------------------------------
+    # Local work that rewind can't bring back
+    # -----------------------------------------------------------------------
+    # Claude Code's rewind restores Claude's own file edits, but not files a
+    # shell command deleted or reset. So these ask first:
+    #   - rm -r, or rm with a wildcard, on anything but scratch folders (tmp,
+    #     temp, caches, build, dist). rm has to be the command itself, not
+    #     part of gsutil rm. A plain rm of named files passes.
+    #   - find -delete, or find -exec rm
+    #   - git reset --hard, git clean -f (not -n, a dry run), git checkout --
+    #     or checkout ., git restore (not just --staged), git switch
+    #     --discard-changes, git stash drop or clear, git branch -D
+    if has '^[[:space:]]*((sudo|xargs|bash[[:space:]]+-c|sh[[:space:]]+-c)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)?rm[[:space:]]' \
+        && { has '[[:space:]](-[[:alnum:]]*[rR][[:alnum:]]*|--recursive)[[:space:]]' || has '[[:space:]]rm[[:space:]].*[*?]'; }; then
+        # The rm targets that aren't scratch folders.
+        kept=$(printf '%s' "$s" | awk -v tmpd="${TMPDIR:-/tmp}" '{
+            for (i = 1; i <= NF; i++) if ($i == "rm") break
+            for (i++; i <= NF; i++) {
+                if ($i ~ /^-/) continue
+                ok = (index($i, tmpd) == 1 || $i ~ /^\/(private\/)?tmp(\/|$)/)
+                n = split($i, c, "/")
+                for (j = 1; j <= n; j++)
+                    if (c[j] ~ /^(tmp|temp|__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|build|dist|node_modules|.*\.egg-info)$/) ok = 1
+                if (!ok) { printf "%s%s", sep, $i; sep = " " }
+            }
+        }')
+        [ -n "$kept" ] && add_ask "deletes local files ($kept)$lost"
+    fi
+    if tok 'find' && has '[[:space:]](-delete|-exec[[:space:]]+rm|-execdir[[:space:]]+rm)[[:space:]]'; then
+        add_ask "deletes the local files find matches$lost"
+    fi
+    if gitcmd 'reset' && tok '--hard'; then
+        add_ask "throws away uncommitted changes (git reset --hard)$lost"
+    fi
+    if gitcmd 'clean' && has '[[:space:]]-[[:alnum:]]*f[[:alnum:]]*[[:space:]]|[[:space:]]--force[[:space:]]' \
+        && ! has '[[:space:]](-[[:alnum:]]*n[[:alnum:]]*|--dry-run)[[:space:]]'; then
+        add_ask "deletes untracked files (git clean)$lost"
+    fi
+    if { gitcmd 'checkout' && has '[[:space:]](--|\.|-f|--force)[[:space:]]'; } \
+        || { gitcmd 'restore' && { ! tok '--staged|-S' || tok '--worktree|-W'; }; } \
+        || { gitcmd 'switch' && has '[[:space:]](-f|--force|--discard-changes)[[:space:]]'; }; then
+        add_ask "throws away uncommitted changes to files$lost"
+    fi
+    if gitcmd 'stash' && tok 'drop|clear'; then
+        add_ask "deletes stashed changes"
+    fi
+    if gitcmd 'branch' && has '[[:space:]](-D|--delete[[:space:]]+--force|-df|-fd)[[:space:]]'; then
+        add_ask "force-deletes a local branch, even with commits that aren't merged anywhere"
     fi
     IFS=$nl
 done

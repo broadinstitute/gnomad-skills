@@ -86,6 +86,22 @@ git init -q "$repos/on_feature" && git -C "$repos/on_feature" symbolic-ref HEAD 
 check block "git -C $repos/on_main push --force-with-lease"
 check ask "git -C $repos/on_feature push --force-with-lease --force-if-includes" 'force-pushes my-feature'
 rm -rf "$repos"
+
+echo "== local work that rewind can't bring back"
+check pass 'rm notes.txt'
+check pass 'rm -rf build/ dist/ .pytest_cache'
+check pass 'git restore --staged README.md'
+check pass 'git clean -n'
+check pass 'git checkout -b new-branch'
+check ask 'rm -rf src/old_module' 'deletes local files (src/old_module)'
+check ask 'cd ~/gnomad_qc && rm -f *.ht'
+check ask "find . -name '*.log' -delete"
+check ask 'git reset --hard HEAD~1'
+check ask 'git clean -fdx'
+check ask 'git checkout -- gnomad/utils/constraint.py'
+check ask 'git restore .'
+check ask 'git stash drop'
+check ask 'git branch -D old-branch'
 check pass 'hailctl dataproc start my-cluster --requester-pays-allow-buckets gnomad-public-requester-pays --max-idle 30m'
 
 echo "== bad input"
