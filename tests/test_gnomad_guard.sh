@@ -102,6 +102,33 @@ check ask 'git checkout -- gnomad/utils/constraint.py'
 check ask 'git restore .'
 check ask 'git stash drop'
 check ask 'git branch -D old-branch'
+
+echo "== GCS: deletes"
+check ask 'gsutil rm -r gs://gnomad/release/x' 'deletes gnomAD release data'
+check ask 'gsutil -m rm -r gs://gnomad-tmp-4day/my-dir/old/'
+check ask 'gsutil -q rm gs://some-bucket/x'
+check ask "bash -c 'gsutil rm gs://some-bucket/x'"
+check ask 'gcloud storage rm --recursive gs://my-bucket/tmp/'
+check ask 'gsutil -m rsync -d -r out/ gs://my-bucket/out/' 'syncs with delete'
+check ask 'hadoop fs -rm -r gs://gnomad-tmp/x'
+check ask 'rm -rf ~/gcs/my-bucket/tmp' 'mounted bucket'
+check ask "python -c \"from hailtop import fs; fs.rmtree('gs://my-bucket/tmp')\"" 'from Python'
+
+echo "== GCS: release paths and overwrites"
+check ask 'gsutil cp local.json gs://gnomad/release/4.1/json/' 'writes to a gnomAD release path'
+check ask "python -c \"ht.write('gs://gnomad/release/4.1/ht/x.ht', overwrite=True)\""
+check ask 'hailctl dataproc submit my-cluster gnomad_qc/v4/create_release/create_release_sites_ht.py --overwrite' 'no --test'
+
+echo "== GCS: requester-pays and billing projects"
+check ask 'gsutil cp gs://gnomad-public-requester-pays/release/4.1/ht/exomes/x /tmp/' 'gcp-public-data--gnomad'
+check ask 'gsutil -u my-project cp gs://gnomad-public-requester-pays/release/4.1/ht/exomes/x /tmp/' 'requester-pays bucket'
+check block 'gsutil -u my-project ls gs://gnomad/release/4.1/'
+check block 'gcloud storage cp --billing-project=my-project gs://gcp-public-data--gnomad/release/4.1/vcf/x.vcf.bgz .'
+check block 'hailctl dataproc start my-cluster --requester-pays-allow-all --max-idle 30m'
+check block "python -c \"import hail as hl; hl.init(gcs_requester_pays_configuration='my-project')\""
+check block 'gcloud dataproc clusters create my-cluster --max-idle 30m --properties core:fs.gs.requester.pays.mode=ENABLED'
+check pass "python -c \"import hail as hl; hl.init(gcs_requester_pays_configuration=('my-project', ['gnomad-public-requester-pays']))\""
+check ask 'hailctl dataproc start my-cluster --requester-pays-allow-buckets gnomad-public-requester-pays,other-lab-bucket --max-idle 30m' 'other-lab-bucket'
 check pass 'hailctl dataproc start my-cluster --requester-pays-allow-buckets gnomad-public-requester-pays --max-idle 30m'
 
 echo "== bad input"
